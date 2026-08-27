@@ -170,6 +170,14 @@ function fmt(dateStr) {
   return `${d}/${m}`;
 }
 
+function isAtrasada(entry) {
+  if (!entry || entry.confirmada || !entry.data) return false;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const dataEntrega = new Date(entry.data + "T00:00:00");
+  return dataEntrega < hoje;
+}
+
 function obraLabel(t) {
   if (t.obraId) {
     const obra = state.obras.find((o) => o.id === t.obraId);
@@ -196,11 +204,11 @@ function renderTarefas() {
       <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
       <div>
         <span class="date-badge-label">Entrega mixagem</span>
-        <span class="date-badge-value ${t.mixagem.confirmada ? "" : "pending"}" data-task="${t.id}" data-field="mixagem">${fmt(t.mixagem.data)}</span>
+        <span class="date-badge-value ${isAtrasada(t.mixagem) ? "pending" : ""}" data-task="${t.id}" data-field="mixagem">${fmt(t.mixagem.data)}</span>
       </div>
       <div>
         <span class="date-badge-label">Entrega master</span>
-        <span class="date-badge-value ${t.master.confirmada ? "" : "pending"}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
+        <span class="date-badge-value ${isAtrasada(t.master) ? "pending" : ""}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
       </div>
       <div class="row-actions">
         ${state.role === "editor" ? `
@@ -227,21 +235,26 @@ function renderCronograma() {
       <p style="font-size:11px">As entregas aparecem aqui assim que houver tarefas cadastradas.</p></div>`;
   }
 
-  return `<div class="timeline">${events.map((e) => `
+  return `<div class="timeline">${events.map((e) => {
+    const atrasada = isAtrasada(e);
+    const cor = e.confirmada ? "#9FE870" : atrasada ? "#E5544C" : "#8C8C88";
+    const statusTxt = e.confirmada ? "Confirmada" : atrasada ? "Atrasada" : "Pendente";
+    return `
     <div class="timeline-item">
-      <div class="timeline-dot" style="background:${e.confirmada ? "#9FE870" : "#E5544C"}"></div>
+      <div class="timeline-dot" style="background:${cor}"></div>
       <div class="timeline-date">${fmt(e.data)}</div>
-      <div class="timeline-card" style="border-color:${e.confirmada ? "#262626" : "#E5544C55"}">
+      <div class="timeline-card" style="border-color:${atrasada ? "#E5544C55" : "#262626"}">
         <div>
           <p style="margin:0;font-size:13px">${e.titulo}</p>
           <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo}</p>
         </div>
-        <span class="pill" style="color:${e.confirmada ? "#9FE870" : "#E5544C"};border:1px solid ${e.confirmada ? "#9FE87055" : "#E5544C55"};background:${e.confirmada ? "#9FE87014" : "#E5544C14"}">
-          ${e.confirmada ? "Confirmada" : "Pendente"}
+        <span class="pill" style="color:${cor};border:1px solid ${cor}55;background:${cor}14">
+          ${statusTxt}
         </span>
       </div>
     </div>
-  `).join("")}</div>`;
+  `;
+  }).join("")}</div>`;
 }
 
 /* ---------------------- CALENDÁRIO ---------------------- */
@@ -275,7 +288,7 @@ function renderCalendario() {
     const items = byDay[d] || [];
     cells += `<div class="cal-cell">
       <div class="cal-day-num">${d}</div>
-      ${items.map((e) => `<p class="cal-event" style="color:${e.confirmada ? "#9FE870" : "#E5544C"}">● ${e.tipo}</p>`).join("")}
+      ${items.map((e) => `<p class="cal-event" style="color:${e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#8C8C88")}">● ${e.tipo}</p>`).join("")}
     </div>`;
   }
 
