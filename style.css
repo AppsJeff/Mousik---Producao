@@ -411,6 +411,23 @@ body {
 .task-edit-btn.danger { border-color: #E5544C55; color: var(--red); }
 .people-card { cursor: default; }
 .obra-meta { font-size: 11px; color: var(--muted); margin: 2px 0; }
+
+.obra-link {
+  background: transparent;
+  border: none;
+  color: var(--gold);
+  font-size: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.obra-plain { color: var(--muted); }
+.people-card.highlight {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
 .select-row { display: flex; gap: 8px; align-items: center; }
 .select-row select { flex: 1; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }

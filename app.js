@@ -164,6 +164,23 @@ document.getElementById("nav").addEventListener("click", (e) => {
   render();
 });
 
+function gotoObra(obraId) {
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
+  const obrasNavBtn = document.querySelector('.nav-item[data-tab="obras"]');
+  if (obrasNavBtn) obrasNavBtn.classList.add("active");
+  state.tab = "obras";
+  updateHeaderButtons();
+  render();
+  setTimeout(() => {
+    const el = document.getElementById(`obra-card-${obraId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("highlight");
+      setTimeout(() => el.classList.remove("highlight"), 2200);
+    }
+  }, 50);
+}
+
 function updateHeaderButtons() {
   document.getElementById("new-task-btn").classList.toggle(
     "hidden",
@@ -226,6 +243,14 @@ function obraLabel(t) {
   return t.obraNome ? `${t.obraNome} (temporária)` : "—";
 }
 
+function obraBadge(t) {
+  const label = obraLabel(t);
+  if (t.obraId) {
+    return `<button type="button" class="obra-link" data-goto-obra="${t.obraId}" title="Ver obra e autores">${label} ↗</button>`;
+  }
+  return `<span class="obra-plain">${label}</span>`;
+}
+
 /* ---------------------- TAREFAS ---------------------- */
 
 function renderTarefas() {
@@ -241,7 +266,7 @@ function renderTarefas() {
     <div class="task-card">
       <div>
         <p class="task-title">${t.titulo}</p>
-        <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraLabel(t)}</p>
+        <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraBadge(t)}</p>
       </div>
       <span class="pill" style="color:#8C8C88;border:1px solid #8C8C8855;background:#8C8C8814">${t.tipo}</span>
       <span style="font-size:12px;color:#8C8C88">${t.produtor}</span>
@@ -270,8 +295,8 @@ function renderCronograma() {
   const tasks = filteredTasks();
   const events = [];
   tasks.forEach((t) => {
-    events.push({ titulo: t.titulo, tipo: "Mixagem", ...t.mixagem });
-    events.push({ titulo: t.titulo, tipo: "Master", ...t.master });
+    events.push({ titulo: t.titulo, tipo: "Mixagem", obraId: t.obraId, obraNome: t.obraNome, ...t.mixagem });
+    events.push({ titulo: t.titulo, tipo: "Master", obraId: t.obraId, obraNome: t.obraNome, ...t.master });
   });
   events.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
 
@@ -294,7 +319,7 @@ function renderCronograma() {
       <div class="timeline-card" style="border-color:${atrasada ? "#E5544C55" : "#262626"}">
         <div>
           <p style="margin:0;font-size:13px">${e.titulo}</p>
-          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo}</p>
+          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}</p>
         </div>
         <span class="pill" style="color:${cor};border:1px solid ${cor}55;background:${cor}14">
           ${statusTxt}
@@ -414,7 +439,7 @@ function renderObras() {
   return `<div class="people-grid">${state.obras.map((o) => {
     const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%)`).join(", ") || "—";
     const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
-    return `<div class="people-card">
+    return `<div class="people-card" id="obra-card-${o.id}">
       <div class="people-card-header">
         <p style="margin:0;font-size:14px">${o.titulo}</p>
         ${state.role === "editor" ? `
@@ -475,6 +500,13 @@ function attachDynamicListeners() {
   });
   document.querySelectorAll("[data-del-person]").forEach((btn) => {
     btn.addEventListener("click", () => deletePerson(btn.dataset.delPerson, btn.dataset.collection));
+  });
+
+  document.querySelectorAll("[data-goto-obra]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      gotoObra(btn.dataset.gotoObra);
+    });
   });
 
   const filterTypeEl = document.getElementById("filter-type");
