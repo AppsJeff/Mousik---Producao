@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mousik — Central de Produção</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0A0A0A" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===================== TELA DE LOGIN ===================== -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-box">
+      <div class="logo">M<span class="logo-o"></span>usik</div>
+      <p class="login-subtitle">Central de Produção</p>
+      <input id="login-email" type="email" placeholder="E-mail" autocomplete="username" />
+      <input id="login-password" type="password" placeholder="Senha" autocomplete="current-password" />
+      <button id="login-btn" class="btn-primary">Entrar</button>
+      <p id="login-error" class="login-error"></p>
+    </div>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div>
+        <div class="logo">M<span class="logo-o"></span>usik</div>
+        <p class="sidebar-subtitle">Central de Produção</p>
+        <nav id="nav" class="nav">
+          <button class="nav-item active" data-tab="tarefas">Tarefas</button>
+          <button class="nav-item" data-tab="cronograma">Cronograma</button>
+          <button class="nav-item" data-tab="calendario">Calendário</button>
+          <button class="nav-item" data-tab="artistas">Artistas</button>
+          <button class="nav-item" data-tab="produtores">Produtores</button>
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        <div class="role-box">
+          <div>
+            <p class="label-muted">Acesso</p>
+            <p id="role-label">—</p>
+          </div>
+        </div>
+        <p id="user-email" class="user-email"></p>
+        <button id="logout-btn" class="btn-ghost">Sair</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="main-header">
+        <div>
+          <p class="label-muted" id="tab-eyebrow">Tarefas</p>
+          <h1 id="tab-title">Tarefas em produção</h1>
+        </div>
+        <button id="new-task-btn" class="btn-primary hidden">+ Nova Tarefa</button>
+      </header>
+
+      <div id="content"></div>
+    </main>
+  </div>
+
+  <!-- ===================== MODAL: NOVA TAREFA ===================== -->
+  <div id="task-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <p>Nova Tarefa</p>
+        <button id="close-modal-btn" class="btn-icon">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <label class="field-label">Título</label>
+        <input id="f-titulo" type="text" placeholder="Ex: Single novo — nome do artista" />
+
+        <label class="field-label">Tipo</label>
+        <select id="f-tipo">
+          <option>Show</option>
+          <option>Single</option>
+          <option>Composição</option>
+        </select>
+
+        <div id="f-artista-wrap">
+          <label class="field-label">Artista</label>
+          <div class="select-row">
+            <select id="f-artista"></select>
+            <button type="button" class="btn-small" data-add="artistas">+ Novo</button>
+          </div>
+        </div>
+
+        <label class="field-label">Produtor</label>
+        <div class="select-row">
+          <select id="f-produtor"></select>
+          <button type="button" class="btn-small" data-add="produtores">+ Novo</button>
+        </div>
+
+        <label class="field-label">Status</label>
+        <select id="f-status">
+          <option>Composição</option>
+          <option>Produção</option>
+          <option>Mixagem</option>
+          <option>Masterização</option>
+          <option>Recall</option>
+        </select>
+
+        <div class="field-grid">
+          <div>
+            <label class="field-label">Entrega da mixagem</label>
+            <input id="f-mix-data" type="date" />
+            <label class="checkbox-label">
+              <input id="f-mix-conf" type="checkbox" /> Confirmada
+            </label>
+          </div>
+          <div>
+            <label class="field-label">Entrega da master</label>
+            <input id="f-master-data" type="date" />
+            <label class="checkbox-label">
+              <input id="f-master-conf" type="checkbox" /> Confirmada
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <button id="save-task-btn" class="btn-primary btn-full">Salvar tarefa</button>
+    </div>
+  </div>
+
+  <!-- Firebase (SDK compat, sem necessidade de build) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
