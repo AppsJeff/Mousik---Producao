@@ -18,8 +18,13 @@ let state = {
   role: "leitor",
   tab: "tarefas",
   tasks: [],
-  artistas: [],
-  produtores: [],
+  artistas: [],  // [{id, nome}]
+  produtores: [], // [{id, nome}]
+  autores: [],    // [{id, nome}]
+  obras: [],      // [{id, titulo, editora, letra, autores:[{nome,percentual}]}]
+  editingTaskId: null,
+  editingObraId: null,
+  obraAutoresDraft: [],
 };
 
 /* ---------------------- AUTENTICAÇÃO ---------------------- */
@@ -43,12 +48,11 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById("app").classList.remove("hidden");
     document.getElementById("user-email").textContent = user.email;
 
-    // Busca o papel (editor/leitor) do usuário na coleção "roles"
     const roleDoc = await db.collection("roles").doc(user.uid).get();
     state.role = roleDoc.exists ? roleDoc.data().role : "leitor";
     document.getElementById("role-label").textContent =
       state.role === "editor" ? "Editor" : "Leitor";
-    document.getElementById("new-task-btn").classList.toggle("hidden", state.role !== "editor");
+    updateHeaderButtons();
 
     listenToData();
   } else {
@@ -65,13 +69,23 @@ function listenToData() {
     render();
   });
   db.collection("artistas").orderBy("nome").onSnapshot((snap) => {
-    state.artistas = snap.docs.map((d) => d.data().nome);
-    fillSelect("f-artista", state.artistas);
+    state.artistas = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
+    fillSelect("f-artista", state.artistas.map((a) => a.nome));
     render();
   });
   db.collection("produtores").orderBy("nome").onSnapshot((snap) => {
-    state.produtores = snap.docs.map((d) => d.data().nome);
-    fillSelect("f-produtor", state.produtores);
+    state.produtores = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
+    fillSelect("f-produtor", state.produtores.map((p) => p.nome));
+    render();
+  });
+  db.collection("autores").orderBy("nome").onSnapshot((snap) => {
+    state.autores = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
+    fillObraAutorSelect();
+    render();
+  });
+  db.collection("obras").orderBy("titulo").onSnapshot((snap) => {
+    state.obras = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    fillObraSelect();
     render();
   });
 }
@@ -83,6 +97,21 @@ function fillSelect(id, options) {
   if (options.includes(current)) el.value = current;
 }
 
+function fillObraSelect() {
+  const el = document.getElementById("f-obra");
+  const current = el.value;
+  el.innerHTML =
+    `<option value="">— Obra temporária (digitar abaixo) —</option>` +
+    state.obras.map((o) => `<option value="${o.id}">${o.titulo}</option>`).join("");
+  if ([...el.options].some((op) => op.value === current)) el.value = current;
+}
+
+function fillObraAutorSelect() {
+  const el = document.getElementById("o-add-autor-select");
+  if (!el) return;
+  el.innerHTML = state.autores.map((a) => `<option value="${a.nome}">${a.nome}</option>`).join("");
+}
+
 /* ---------------------- NAVEGAÇÃO ---------------------- */
 
 document.getElementById("nav").addEventListener("click", (e) => {
@@ -91,12 +120,20 @@ document.getElementById("nav").addEventListener("click", (e) => {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
   state.tab = btn.dataset.tab;
+  updateHeaderButtons();
+  render();
+});
+
+function updateHeaderButtons() {
   document.getElementById("new-task-btn").classList.toggle(
     "hidden",
     !(state.tab === "tarefas" && state.role === "editor")
   );
-  render();
-});
+  document.getElementById("new-obra-btn").classList.toggle(
+    "hidden",
+    !(state.tab === "obras" && state.role === "editor")
+  );
+}
 
 const TAB_META = {
   tarefas: { eyebrow: "Tarefas", title: "Tarefas em produção" },
@@ -104,6 +141,8 @@ const TAB_META = {
   calendario: { eyebrow: "Calendário", title: "Calendário de entregas" },
   artistas: { eyebrow: "Artistas", title: "Artistas" },
   produtores: { eyebrow: "Produtores", title: "Produtores" },
+  autores: { eyebrow: "Autores", title: "Autores" },
+  obras: { eyebrow: "Obras", title: "Obras" },
 };
 
 /* ---------------------- RENDER PRINCIPAL ---------------------- */
@@ -117,8 +156,10 @@ function render() {
   if (state.tab === "tarefas") content.innerHTML = renderTarefas();
   if (state.tab === "cronograma") content.innerHTML = renderCronograma();
   if (state.tab === "calendario") content.innerHTML = renderCalendario();
-  if (state.tab === "artistas") content.innerHTML = renderPessoas("artista", state.artistas);
-  if (state.tab === "produtores") content.innerHTML = renderPessoas("produtor", state.produtores);
+  if (state.tab === "artistas") content.innerHTML = renderPessoas("artista", state.artistas, "artistas");
+  if (state.tab === "produtores") content.innerHTML = renderPessoas("produtor", state.produtores, "produtores");
+  if (state.tab === "autores") content.innerHTML = renderPessoas(null, state.autores, "autores");
+  if (state.tab === "obras") content.innerHTML = renderObras();
 
   attachDynamicListeners();
 }
@@ -127,6 +168,14 @@ function fmt(dateStr) {
   if (!dateStr) return "—";
   const [y, m, d] = dateStr.split("-");
   return `${d}/${m}`;
+}
+
+function obraLabel(t) {
+  if (t.obraId) {
+    const obra = state.obras.find((o) => o.id === t.obraId);
+    return obra ? obra.titulo : (t.obraNome || "—");
+  }
+  return t.obraNome ? `${t.obraNome} (temporária)` : "—";
 }
 
 /* ---------------------- TAREFAS ---------------------- */
@@ -140,7 +189,7 @@ function renderTarefas() {
     <div class="task-card">
       <div>
         <p class="task-title">${t.titulo}</p>
-        <p class="task-sub">${t.artista || "Sem artista vinculado"}</p>
+        <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraLabel(t)}</p>
       </div>
       <span class="pill" style="color:#8C8C88;border:1px solid #8C8C8855;background:#8C8C8814">${t.tipo}</span>
       <span style="font-size:12px;color:#8C8C88">${t.produtor}</span>
@@ -153,7 +202,12 @@ function renderTarefas() {
         <span class="date-badge-label">Entrega master</span>
         <span class="date-badge-value ${t.master.confirmada ? "" : "pending"}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
       </div>
-      <div></div>
+      <div class="row-actions">
+        ${state.role === "editor" ? `
+          <button class="task-edit-btn" data-edit-task="${t.id}">Editar</button>
+          <button class="task-edit-btn danger" data-del-task="${t.id}">Excluir</button>
+        ` : ""}
+      </div>
     </div>
   `).join("");
 }
@@ -238,34 +292,83 @@ function renderCalendario() {
   `;
 }
 
-/* ---------------------- ARTISTAS / PRODUTORES ---------------------- */
+/* ---------------------- ARTISTAS / PRODUTORES / AUTORES ---------------------- */
 
-function renderPessoas(field, names) {
+function renderPessoas(taskField, people, collection) {
+  const label = { artistas: "artista", produtores: "produtor", autores: "autor" }[collection];
   const addRow = state.role === "editor"
     ? `<div class="people-add">
-        <input id="new-person-input" placeholder="Nome do novo ${field}" />
-        <button class="btn-primary" id="new-person-btn" style="white-space:nowrap">+ Adicionar</button>
+        <input id="new-person-input" data-collection="${collection}" placeholder="Nome do novo ${label}" />
+        <button class="btn-primary" id="new-person-btn" data-collection="${collection}" style="white-space:nowrap">+ Adicionar</button>
       </div>`
     : "";
 
-  if (names.length === 0) {
+  if (people.length === 0) {
     return `${addRow}<div class="empty-state"><p>Ninguém cadastrado ainda</p>
       <p style="font-size:11px">${state.role === "editor" ? "Use o campo acima para adicionar." : "Volte em breve."}</p></div>`;
   }
 
-  const cards = names.map((name) => {
-    const related = state.tasks.filter((t) => t[field] === name);
+  const cards = people.map((p) => {
+    const name = p.nome;
+    const related = taskField ? state.tasks.filter((t) => t[taskField] === name) : [];
+    const obrasDoAutor = collection === "autores"
+      ? state.obras.filter((o) => (o.autores || []).some((a) => a.nome === name))
+      : [];
     return `<div class="people-card">
-      <div class="people-card-header"><p style="margin:0;font-size:14px">${name}</p></div>
-      ${related.length === 0 ? `<p style="font-size:11px;color:#8C8C88">Nenhuma tarefa no momento</p>` : ""}
+      <div class="people-card-header">
+        <p style="margin:0;font-size:14px">${name}</p>
+        ${state.role === "editor" ? `
+          <div class="row-actions">
+            <button class="task-edit-btn" data-edit-person="${p.id}" data-collection="${collection}">Editar</button>
+            <button class="task-edit-btn danger" data-del-person="${p.id}" data-collection="${collection}">Excluir</button>
+          </div>` : ""}
+      </div>
+      ${taskField && related.length === 0 ? `<p style="font-size:11px;color:#8C8C88">Nenhuma tarefa no momento</p>` : ""}
       ${related.map((t) => `<div class="people-task-row">
         <span>${t.titulo}</span>
         <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
       </div>`).join("")}
+      ${collection === "autores" ? (
+        obrasDoAutor.length === 0
+          ? `<p style="font-size:11px;color:#8C8C88">Nenhuma obra vinculada</p>`
+          : obrasDoAutor.map((o) => {
+              const pct = (o.autores.find((a) => a.nome === name) || {}).percentual ?? 0;
+              return `<div class="people-task-row"><span>${o.titulo}</span><span class="pill" style="color:#E8C468;border:1px solid #E8C46855;background:#E8C46814">${pct}%</span></div>`;
+            }).join("")
+      ) : ""}
     </div>`;
   }).join("");
 
   return `${addRow}<div class="people-grid">${cards}</div>`;
+}
+
+/* ---------------------- OBRAS ---------------------- */
+
+function renderObras() {
+  if (state.obras.length === 0) {
+    return `<div class="empty-state"><p>Nenhuma obra cadastrada ainda</p>
+      <p style="font-size:11px">${state.role === "editor" ? 'Use o botão "Nova Obra" para começar.' : "Volte em breve."}</p></div>`;
+  }
+  return `<div class="people-grid">${state.obras.map((o) => {
+    const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%)`).join(", ") || "—";
+    const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
+    return `<div class="people-card">
+      <div class="people-card-header">
+        <p style="margin:0;font-size:14px">${o.titulo}</p>
+        ${state.role === "editor" ? `
+          <div class="row-actions">
+            <button class="task-edit-btn" data-edit-obra="${o.id}">Editar</button>
+            <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
+          </div>` : ""}
+      </div>
+      <p class="obra-meta">Autores: ${autoresTxt}</p>
+      <p class="obra-meta">Editora: ${o.editora || "—"}</p>
+      ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
+        <span>${t.titulo}</span>
+        <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
+      </div>`).join("") : `<p style="font-size:11px;color:#8C8C88;margin-top:6px">Nenhuma tarefa vinculada</p>`}
+    </div>`;
+  }).join("")}</div>`;
 }
 
 /* ---------------------- LISTENERS DINÂMICOS (após cada render) ---------------------- */
@@ -283,6 +386,35 @@ function attachDynamicListeners() {
     });
   });
 
+  document.querySelectorAll("[data-edit-task]").forEach((btn) => {
+    btn.addEventListener("click", () => openTaskModal(btn.dataset.editTask));
+  });
+  document.querySelectorAll("[data-del-task]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm("Excluir esta tarefa? Essa ação não pode ser desfeita.")) {
+        db.collection("tasks").doc(btn.dataset.delTask).delete();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-edit-obra]").forEach((btn) => {
+    btn.addEventListener("click", () => openObraModal(btn.dataset.editObra));
+  });
+  document.querySelectorAll("[data-del-obra]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm("Excluir esta obra? As tarefas vinculadas a ela ficarão sem obra.")) {
+        db.collection("obras").doc(btn.dataset.delObra).delete();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-edit-person]").forEach((btn) => {
+    btn.addEventListener("click", () => editPerson(btn.dataset.editPerson, btn.dataset.collection));
+  });
+  document.querySelectorAll("[data-del-person]").forEach((btn) => {
+    btn.addEventListener("click", () => deletePerson(btn.dataset.delPerson, btn.dataset.collection));
+  });
+
   const prevBtn = document.getElementById("cal-prev");
   const nextBtn = document.getElementById("cal-next");
   if (prevBtn) prevBtn.addEventListener("click", () => { calMonthOffset--; render(); });
@@ -294,24 +426,99 @@ function attachDynamicListeners() {
       const input = document.getElementById("new-person-input");
       const name = input.value.trim();
       if (!name) return;
-      const collection = state.tab === "artistas" ? "artistas" : "produtores";
-      db.collection(collection).add({ nome: name });
+      db.collection(addBtn.dataset.collection).add({ nome: name });
       input.value = "";
     });
   }
 }
 
-/* ---------------------- MODAL: NOVA TAREFA ---------------------- */
+/* ---------------------- EDITAR / EXCLUIR ARTISTA, PRODUTOR, AUTOR ---------------------- */
+/* Ao renomear, atualiza também as referências existentes em tarefas e obras */
 
-const modal = document.getElementById("task-modal");
+const TASK_FIELD_BY_COLLECTION = { artistas: "artista", produtores: "produtor" };
 
-document.getElementById("new-task-btn").addEventListener("click", () => {
-  modal.classList.remove("hidden");
-  fillSelect("f-artista", state.artistas);
-  fillSelect("f-produtor", state.produtores);
-});
+function editPerson(id, collection) {
+  const list = state[collection];
+  const person = list.find((p) => p.id === id);
+  if (!person) return;
+  const novoNome = prompt("Novo nome:", person.nome);
+  if (!novoNome || !novoNome.trim() || novoNome.trim() === person.nome) return;
+  const nomeAntigo = person.nome;
+  const nomeNovo = novoNome.trim();
 
-document.getElementById("close-modal-btn").addEventListener("click", () => modal.classList.add("hidden"));
+  const batch = db.batch();
+  batch.update(db.collection(collection).doc(id), { nome: nomeNovo });
+
+  if (collection === "artistas" || collection === "produtores") {
+    const field = TASK_FIELD_BY_COLLECTION[collection];
+    state.tasks.filter((t) => t[field] === nomeAntigo).forEach((t) => {
+      batch.update(db.collection("tasks").doc(t.id), { [field]: nomeNovo });
+    });
+  }
+
+  if (collection === "autores") {
+    state.obras.filter((o) => (o.autores || []).some((a) => a.nome === nomeAntigo)).forEach((o) => {
+      const novosAutores = o.autores.map((a) => a.nome === nomeAntigo ? { ...a, nome: nomeNovo } : a);
+      batch.update(db.collection("obras").doc(o.id), { autores: novosAutores });
+    });
+  }
+
+  batch.commit();
+}
+
+function deletePerson(id, collection) {
+  const list = state[collection];
+  const person = list.find((p) => p.id === id);
+  if (!person) return;
+
+  let emUso = false;
+  if (collection === "artistas") emUso = state.tasks.some((t) => t.artista === person.nome);
+  if (collection === "produtores") emUso = state.tasks.some((t) => t.produtor === person.nome);
+  if (collection === "autores") emUso = state.obras.some((o) => (o.autores || []).some((a) => a.nome === person.nome));
+
+  const aviso = emUso
+    ? " Ele(a) está vinculado(a) a tarefas ou obras existentes, que manterão o nome mesmo após a exclusão."
+    : "";
+  if (confirm(`Excluir "${person.nome}"?${aviso}`)) {
+    db.collection(collection).doc(id).delete();
+  }
+}
+
+/* ---------------------- MODAL: NOVA/EDITAR TAREFA ---------------------- */
+
+const taskModal = document.getElementById("task-modal");
+
+function openTaskModal(taskId) {
+  state.editingTaskId = taskId || null;
+  const task = taskId ? state.tasks.find((t) => t.id === taskId) : null;
+
+  document.getElementById("task-modal-title").textContent = task ? "Editar Tarefa" : "Nova Tarefa";
+  document.getElementById("save-task-btn").textContent = task ? "Salvar alterações" : "Salvar tarefa";
+
+  fillSelect("f-artista", state.artistas.map((a) => a.nome));
+  fillSelect("f-produtor", state.produtores.map((p) => p.nome));
+  fillObraSelect();
+
+  document.getElementById("f-titulo").value = task ? task.titulo : "";
+  document.getElementById("f-tipo").value = task ? task.tipo : "Single";
+  document.getElementById("f-artista-wrap").classList.toggle("hidden", task ? task.tipo === "Composição" : false);
+  if (task && task.artista) document.getElementById("f-artista").value = task.artista;
+  if (task && task.produtor) document.getElementById("f-produtor").value = task.produtor;
+  document.getElementById("f-status").value = task ? task.status : "Composição";
+
+  document.getElementById("f-obra").value = task && task.obraId ? task.obraId : "";
+  document.getElementById("f-obra-temp").value = task && !task.obraId ? (task.obraNome || "") : "";
+
+  document.getElementById("f-mix-data").value = task ? task.mixagem.data || "" : "";
+  document.getElementById("f-mix-conf").checked = task ? !!task.mixagem.confirmada : false;
+  document.getElementById("f-master-data").value = task ? task.master.data || "" : "";
+  document.getElementById("f-master-conf").checked = task ? !!task.master.confirmada : false;
+
+  taskModal.classList.remove("hidden");
+}
+
+document.getElementById("new-task-btn").addEventListener("click", () => openTaskModal(null));
+document.getElementById("close-modal-btn").addEventListener("click", () => taskModal.classList.add("hidden"));
 
 document.getElementById("f-tipo").addEventListener("change", (e) => {
   document.getElementById("f-artista-wrap").classList.toggle("hidden", e.target.value === "Composição");
@@ -333,6 +540,8 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
   const artista = tipo === "Composição" ? null : document.getElementById("f-artista").value;
   const produtor = document.getElementById("f-produtor").value;
   const status = document.getElementById("f-status").value;
+  const obraId = document.getElementById("f-obra").value || null;
+  const obraTemp = document.getElementById("f-obra-temp").value.trim();
   const mixData = document.getElementById("f-mix-data").value;
   const mixConf = document.getElementById("f-mix-conf").checked;
   const masterData = document.getElementById("f-master-data").value;
@@ -341,19 +550,121 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
   if (!titulo) { alert("Preencha o título da tarefa."); return; }
   if (tipo !== "Composição" && !artista) { alert("Selecione ou cadastre um artista."); return; }
   if (!produtor) { alert("Selecione ou cadastre um produtor."); return; }
+  if (!obraId && !obraTemp) { alert("Selecione uma obra cadastrada ou digite um nome temporário."); return; }
 
-  db.collection("tasks").add({
+  const obraNome = obraId
+    ? (state.obras.find((o) => o.id === obraId) || {}).titulo || ""
+    : obraTemp;
+
+  const payload = {
     titulo, tipo, artista, produtor, status,
+    obraId, obraNome,
     mixagem: { data: mixData, confirmada: mixConf },
     master: { data: masterData, confirmada: masterConf },
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (state.editingTaskId) {
+    db.collection("tasks").doc(state.editingTaskId).update(payload);
+  } else {
+    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    db.collection("tasks").add(payload);
+  }
+
+  taskModal.classList.add("hidden");
+  state.editingTaskId = null;
+});
+
+/* ---------------------- MODAL: NOVA/EDITAR OBRA ---------------------- */
+
+const obraModal = document.getElementById("obra-modal");
+
+function openObraModal(obraId) {
+  state.editingObraId = obraId || null;
+  const obra = obraId ? state.obras.find((o) => o.id === obraId) : null;
+
+  document.getElementById("obra-modal-title").textContent = obra ? "Editar Obra" : "Nova Obra";
+  document.getElementById("save-obra-btn").textContent = obra ? "Salvar alterações" : "Salvar obra";
+
+  document.getElementById("o-titulo").value = obra ? obra.titulo : "";
+  document.getElementById("o-editora").value = obra ? obra.editora || "" : "";
+  document.getElementById("o-letra").value = obra ? obra.letra || "" : "";
+
+  state.obraAutoresDraft = obra ? JSON.parse(JSON.stringify(obra.autores || [])) : [];
+  fillObraAutorSelect();
+  renderObraAutoresDraft();
+
+  obraModal.classList.remove("hidden");
+}
+
+document.getElementById("new-obra-btn").addEventListener("click", () => openObraModal(null));
+document.getElementById("close-obra-modal-btn").addEventListener("click", () => obraModal.classList.add("hidden"));
+
+function renderObraAutoresDraft() {
+  const list = document.getElementById("o-autores-list");
+  list.innerHTML = state.obraAutoresDraft.map((a, i) => `
+    <div class="autor-row">
+      <span>${a.nome}</span>
+      <input type="number" min="0" max="100" value="${a.percentual}" data-autor-idx="${i}" />
+      <span>%</span>
+      <button type="button" data-remove-autor="${i}">✕</button>
+    </div>
+  `).join("");
+
+  list.querySelectorAll("input[data-autor-idx]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const idx = Number(e.target.dataset.autorIdx);
+      state.obraAutoresDraft[idx].percentual = Number(e.target.value) || 0;
+      updateObraTotalLabel();
+    });
+  });
+  list.querySelectorAll("[data-remove-autor]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.removeAutor);
+      state.obraAutoresDraft.splice(idx, 1);
+      renderObraAutoresDraft();
+      updateObraTotalLabel();
+    });
   });
 
-  // limpa o formulário
-  document.getElementById("f-titulo").value = "";
-  document.getElementById("f-mix-data").value = "";
-  document.getElementById("f-mix-conf").checked = false;
-  document.getElementById("f-master-data").value = "";
-  document.getElementById("f-master-conf").checked = false;
-  modal.classList.add("hidden");
+  updateObraTotalLabel();
+}
+
+function updateObraTotalLabel() {
+  const total = state.obraAutoresDraft.reduce((s, a) => s + (a.percentual || 0), 0);
+  const label = document.getElementById("o-total-label");
+  label.textContent = `Total: ${total}%`;
+  label.className = "field-hint " + (total === 100 ? "ok" : "warn");
+}
+
+document.getElementById("o-add-autor-btn").addEventListener("click", () => {
+  const select = document.getElementById("o-add-autor-select");
+  const nome = select.value;
+  if (!nome) { alert("Cadastre um autor na aba Autores primeiro."); return; }
+  if (state.obraAutoresDraft.some((a) => a.nome === nome)) { alert("Esse autor já foi adicionado."); return; }
+  state.obraAutoresDraft.push({ nome, percentual: 0 });
+  renderObraAutoresDraft();
+});
+
+document.getElementById("save-obra-btn").addEventListener("click", () => {
+  const titulo = document.getElementById("o-titulo").value.trim();
+  const editora = document.getElementById("o-editora").value.trim();
+  const letra = document.getElementById("o-letra").value.trim();
+  const autores = state.obraAutoresDraft;
+
+  if (!titulo) { alert("Preencha o título da obra."); return; }
+  if (autores.length === 0) { alert("Adicione ao menos um autor."); return; }
+  const total = autores.reduce((s, a) => s + (a.percentual || 0), 0);
+  if (total !== 100) { alert(`Os percentuais precisam somar 100%. Atualmente somam ${total}%.`); return; }
+
+  const payload = { titulo, editora, letra, autores };
+
+  if (state.editingObraId) {
+    db.collection("obras").doc(state.editingObraId).update(payload);
+  } else {
+    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    db.collection("obras").add(payload);
+  }
+
+  obraModal.classList.add("hidden");
+  state.editingObraId = null;
 });

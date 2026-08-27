@@ -200,7 +200,7 @@ body {
   border-radius: 8px;
   padding: 16px 18px;
   display: grid;
-  grid-template-columns: 1.6fr 0.6fr 0.8fr 0.8fr 0.9fr 0.7fr 0.7fr;
+  grid-template-columns: 1.4fr 0.55fr 0.7fr 0.7fr 0.8fr 0.65fr 0.65fr 0.6fr;
   align-items: center;
   gap: 14px;
   margin-bottom: 10px;
@@ -301,7 +301,7 @@ body {
   border-radius: 8px;
   padding: 14px;
 }
-.people-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.people-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
 .people-task-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
 .people-task-row span { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
 
@@ -332,7 +332,8 @@ body {
 }
 .modal input[type="text"],
 .modal input[type="date"],
-.modal select {
+.modal select,
+.modal textarea {
   width: 100%;
   background: transparent;
   border: none;
@@ -341,7 +342,59 @@ body {
   font-size: 13px;
   padding: 7px 0;
   outline: none;
+  font-family: inherit;
+  resize: vertical;
 }
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+.field-hint.ok { color: var(--green); }
+.field-hint.warn { color: var(--red); }
+
+.autor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.autor-row span { flex: 1; font-size: 12px; }
+.autor-row input[type="number"] {
+  width: 60px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 6px;
+  outline: none;
+}
+.autor-row button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.task-card { position: relative; }
+.task-edit-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 5px;
+  font-size: 10px;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.row-actions { display: flex; gap: 6px; }
+.task-edit-btn.danger { border-color: #E5544C55; color: var(--red); }
+.people-card { cursor: default; }
+.obra-meta { font-size: 11px; color: var(--muted); margin: 2px 0; }
 .select-row { display: flex; gap: 8px; align-items: center; }
 .select-row select { flex: 1; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }

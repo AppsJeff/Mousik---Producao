@@ -34,6 +34,8 @@
           <button class="nav-item" data-tab="calendario">Calendário</button>
           <button class="nav-item" data-tab="artistas">Artistas</button>
           <button class="nav-item" data-tab="produtores">Produtores</button>
+          <button class="nav-item" data-tab="autores">Autores</button>
+          <button class="nav-item" data-tab="obras">Obras</button>
         </nav>
       </div>
       <div class="sidebar-footer">
@@ -55,6 +57,7 @@
           <h1 id="tab-title">Tarefas em produção</h1>
         </div>
         <button id="new-task-btn" class="btn-primary hidden">+ Nova Tarefa</button>
+        <button id="new-obra-btn" class="btn-primary hidden">+ Nova Obra</button>
       </header>
 
       <div id="content"></div>
@@ -65,13 +68,19 @@
   <div id="task-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <p>Nova Tarefa</p>
+        <p id="task-modal-title">Nova Tarefa</p>
         <button id="close-modal-btn" class="btn-icon">✕</button>
       </div>
 
       <div class="modal-body">
         <label class="field-label">Título</label>
         <input id="f-titulo" type="text" placeholder="Ex: Single novo — nome do artista" />
+
+        <label class="field-label">Obra</label>
+        <select id="f-obra">
+          <option value="">— Obra temporária (digitar abaixo) —</option>
+        </select>
+        <input id="f-obra-temp" type="text" placeholder="Nome temporário da obra (até ser cadastrada)" style="margin-top:6px" />
 
         <label class="field-label">Tipo</label>
         <select id="f-tipo">
@@ -122,6 +131,37 @@
       </div>
 
       <button id="save-task-btn" class="btn-primary btn-full">Salvar tarefa</button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: NOVA/EDITAR OBRA ===================== -->
+  <div id="obra-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <p id="obra-modal-title">Nova Obra</p>
+        <button id="close-obra-modal-btn" class="btn-icon">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <label class="field-label">Título da obra</label>
+        <input id="o-titulo" type="text" placeholder="Ex: Bang" />
+
+        <label class="field-label">Editora</label>
+        <input id="o-editora" type="text" placeholder="Ex: Mousik Editora" />
+
+        <label class="field-label">Letra</label>
+        <textarea id="o-letra" rows="4" placeholder="Letra da música"></textarea>
+
+        <label class="field-label">Autores e percentuais</label>
+        <div id="o-autores-list"></div>
+        <div class="select-row" style="margin-top:6px">
+          <select id="o-add-autor-select"></select>
+          <button type="button" id="o-add-autor-btn" class="btn-small">+ Adicionar autor</button>
+        </div>
+        <p id="o-total-label" class="field-hint">Total: 0%</p>
+      </div>
+
+      <button id="save-obra-btn" class="btn-primary btn-full">Salvar obra</button>
     </div>
   </div>
 
