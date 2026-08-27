@@ -223,8 +223,24 @@ body {
   color: var(--muted);
   display: block;
 }
-.date-badge-value { font-size: 12px; cursor: pointer; }
+.date-badge-value { font-size: 12px; cursor: pointer; color: var(--text); }
 .date-badge-value.pending { color: var(--red); }
+.date-badge-value.confirmed { color: var(--green); }
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.filter-bar select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  outline: none;
+}
 
 .empty-state {
   border: 1px dashed var(--line);

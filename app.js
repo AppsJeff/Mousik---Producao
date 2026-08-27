@@ -25,7 +25,47 @@ let state = {
   editingTaskId: null,
   editingObraId: null,
   obraAutoresDraft: [],
+  filter: { type: "todos", value: "" },
 };
+
+function filteredTasks() {
+  if (state.filter.type === "produtor" && state.filter.value) {
+    return state.tasks.filter((t) => t.produtor === state.filter.value);
+  }
+  if (state.filter.type === "artista" && state.filter.value) {
+    return state.tasks.filter((t) => t.artista === state.filter.value);
+  }
+  return state.tasks;
+}
+
+function renderFilterBar() {
+  const { type, value } = state.filter;
+  let valueOptions = "";
+  if (type === "produtor") {
+    valueOptions = state.produtores
+      .map((p) => `<option value="${p.nome}" ${p.nome === value ? "selected" : ""}>${p.nome}</option>`)
+      .join("");
+  } else if (type === "artista") {
+    valueOptions = state.artistas
+      .map((a) => `<option value="${a.nome}" ${a.nome === value ? "selected" : ""}>${a.nome}</option>`)
+      .join("");
+  }
+  return `
+    <div class="filter-bar">
+      <select id="filter-type">
+        <option value="todos" ${type === "todos" ? "selected" : ""}>Todas as tarefas</option>
+        <option value="produtor" ${type === "produtor" ? "selected" : ""}>Por produtor</option>
+        <option value="artista" ${type === "artista" ? "selected" : ""}>Por artista</option>
+      </select>
+      ${type !== "todos" ? `
+        <select id="filter-value">
+          <option value="">Selecione...</option>
+          ${valueOptions}
+        </select>
+      ` : ""}
+    </div>
+  `;
+}
 
 /* ---------------------- AUTENTICAÇÃO ---------------------- */
 
@@ -153,9 +193,9 @@ function render() {
   document.getElementById("tab-title").textContent = meta.title;
 
   const content = document.getElementById("content");
-  if (state.tab === "tarefas") content.innerHTML = renderTarefas();
-  if (state.tab === "cronograma") content.innerHTML = renderCronograma();
-  if (state.tab === "calendario") content.innerHTML = renderCalendario();
+  if (state.tab === "tarefas") content.innerHTML = renderFilterBar() + renderTarefas();
+  if (state.tab === "cronograma") content.innerHTML = renderFilterBar() + renderCronograma();
+  if (state.tab === "calendario") content.innerHTML = renderFilterBar() + renderCalendario();
   if (state.tab === "artistas") content.innerHTML = renderPessoas("artista", state.artistas, "artistas");
   if (state.tab === "produtores") content.innerHTML = renderPessoas("produtor", state.produtores, "produtores");
   if (state.tab === "autores") content.innerHTML = renderPessoas(null, state.autores, "autores");
@@ -189,11 +229,15 @@ function obraLabel(t) {
 /* ---------------------- TAREFAS ---------------------- */
 
 function renderTarefas() {
+  const tasks = filteredTasks();
   if (state.tasks.length === 0) {
     return `<div class="empty-state"><p>Nenhuma tarefa cadastrada ainda</p>
       <p style="font-size:11px">${state.role === "editor" ? 'Use o botão "Nova Tarefa" para começar.' : "Assim que houver tarefas, elas aparecem aqui."}</p></div>`;
   }
-  return state.tasks.map((t) => `
+  if (tasks.length === 0) {
+    return `<div class="empty-state"><p>Nenhuma tarefa encontrada com esse filtro</p></div>`;
+  }
+  return tasks.map((t) => `
     <div class="task-card">
       <div>
         <p class="task-title">${t.titulo}</p>
@@ -204,11 +248,11 @@ function renderTarefas() {
       <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
       <div>
         <span class="date-badge-label">Entrega mixagem</span>
-        <span class="date-badge-value ${isAtrasada(t.mixagem) ? "pending" : ""}" data-task="${t.id}" data-field="mixagem">${fmt(t.mixagem.data)}</span>
+        <span class="date-badge-value ${t.mixagem.confirmada ? "confirmed" : (isAtrasada(t.mixagem) ? "pending" : "")}" data-task="${t.id}" data-field="mixagem">${fmt(t.mixagem.data)}</span>
       </div>
       <div>
         <span class="date-badge-label">Entrega master</span>
-        <span class="date-badge-value ${isAtrasada(t.master) ? "pending" : ""}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
+        <span class="date-badge-value ${t.master.confirmada ? "confirmed" : (isAtrasada(t.master) ? "pending" : "")}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
       </div>
       <div class="row-actions">
         ${state.role === "editor" ? `
@@ -223,22 +267,26 @@ function renderTarefas() {
 /* ---------------------- CRONOGRAMA ---------------------- */
 
 function renderCronograma() {
+  const tasks = filteredTasks();
   const events = [];
-  state.tasks.forEach((t) => {
+  tasks.forEach((t) => {
     events.push({ titulo: t.titulo, tipo: "Mixagem", ...t.mixagem });
     events.push({ titulo: t.titulo, tipo: "Master", ...t.master });
   });
   events.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
 
-  if (events.length === 0) {
+  if (state.tasks.length === 0) {
     return `<div class="empty-state"><p>Nenhuma entrega no cronograma</p>
       <p style="font-size:11px">As entregas aparecem aqui assim que houver tarefas cadastradas.</p></div>`;
+  }
+  if (events.length === 0) {
+    return `<div class="empty-state"><p>Nenhuma entrega encontrada com esse filtro</p></div>`;
   }
 
   return `<div class="timeline">${events.map((e) => {
     const atrasada = isAtrasada(e);
-    const cor = e.confirmada ? "#9FE870" : atrasada ? "#E5544C" : "#8C8C88";
-    const statusTxt = e.confirmada ? "Confirmada" : atrasada ? "Atrasada" : "Pendente";
+    const cor = e.confirmada ? "#9FE870" : atrasada ? "#E5544C" : "#F3F3F1";
+    const statusTxt = e.confirmada ? "Confirmada" : atrasada ? "Atrasada" : "No prazo";
     return `
     <div class="timeline-item">
       <div class="timeline-dot" style="background:${cor}"></div>
@@ -262,6 +310,7 @@ function renderCronograma() {
 let calMonthOffset = 0;
 
 function renderCalendario() {
+  const tasks = filteredTasks();
   const base = new Date(2026, 7 + calMonthOffset, 1);
   const year = base.getFullYear();
   const month = base.getMonth();
@@ -270,7 +319,7 @@ function renderCalendario() {
   const monthName = base.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
   const byDay = {};
-  state.tasks.forEach((t) => {
+  tasks.forEach((t) => {
     [{ ...t.mixagem, tipo: "Mixagem", titulo: t.titulo }, { ...t.master, tipo: "Master", titulo: t.titulo }].forEach((e) => {
       if (!e.data) return;
       const d = new Date(e.data);
@@ -288,7 +337,7 @@ function renderCalendario() {
     const items = byDay[d] || [];
     cells += `<div class="cal-cell">
       <div class="cal-day-num">${d}</div>
-      ${items.map((e) => `<p class="cal-event" style="color:${e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#8C8C88")}">● ${e.tipo}</p>`).join("")}
+      ${items.map((e) => `<p class="cal-event" style="color:${e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#F3F3F1")}">● ${e.tipo}</p>`).join("")}
     </div>`;
   }
 
@@ -427,6 +476,22 @@ function attachDynamicListeners() {
   document.querySelectorAll("[data-del-person]").forEach((btn) => {
     btn.addEventListener("click", () => deletePerson(btn.dataset.delPerson, btn.dataset.collection));
   });
+
+  const filterTypeEl = document.getElementById("filter-type");
+  if (filterTypeEl) {
+    filterTypeEl.addEventListener("change", (e) => {
+      state.filter.type = e.target.value;
+      state.filter.value = "";
+      render();
+    });
+  }
+  const filterValueEl = document.getElementById("filter-value");
+  if (filterValueEl) {
+    filterValueEl.addEventListener("change", (e) => {
+      state.filter.value = e.target.value;
+      render();
+    });
+  }
 
   const prevBtn = document.getElementById("cal-prev");
   const nextBtn = document.getElementById("cal-next");
