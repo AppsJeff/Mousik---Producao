@@ -1,12 +1,11 @@
 // ===================================================================
-// COLE AQUI AS CHAVES DO SEU PROJETO FIREBASE
-// (Você vai pegar esses valores no Firebase Console, na Fase 3)
+// Configuração do Firebase — projeto mousik---producao
 // ===================================================================
 const firebaseConfig = {
-  apiKey: "COLE_AQUI",
-  authDomain: "COLE_AQUI",
-  projectId: "COLE_AQUI",
-  storageBucket: "COLE_AQUI",
-  messagingSenderId: "COLE_AQUI",
-  appId: "COLE_AQUI",
+  apiKey: "AIzaSyDQ2EIoB2QujYbWFpeG1BOAe9pczpTeuXE",
+  authDomain: "mousik---producao.firebaseapp.com",
+  projectId: "mousik---producao",
+  storageBucket: "mousik---producao.firebasestorage.app",
+  messagingSenderId: "1034929897149",
+  appId: "1:1034929897149:web:ebad5ca6804efeb73781d4",
 };
