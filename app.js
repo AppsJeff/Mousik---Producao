@@ -319,7 +319,7 @@ function renderTarefas() {
     return `<div class="empty-state"><p>Nenhuma tarefa encontrada com esse filtro</p></div>`;
   }
   return tasks.map((t) => `
-    <div class="task-card" id="task-card-${t.id}">
+    <div class="task-card clickable" id="task-card-${t.id}" data-view-task="${t.id}">
       <div>
         <p class="task-title">${t.titulo} ${taskEmojis(t)}</p>
         <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraBadge(t)}${t.cliente ? ` · Cliente: ${t.cliente}` : ""}</p>
@@ -331,6 +331,7 @@ function renderTarefas() {
       <div>
         <span class="date-badge-label">Entrega mixagem</span>
         <span class="date-badge-value ${t.mixagem.confirmada ? "confirmed" : (isAtrasada(t.mixagem) ? "pending" : "")}" data-task="${t.id}" data-field="mixagem" title="Clique para confirmar com Mix OK">${fmt(t.mixagem.data)}</span>
+        ${t.mixagem.linkBackup ? `<a href="${t.mixagem.linkBackup}" target="_blank" rel="noopener" class="backup-link" data-stop-card-click title="Abrir link do backup">🔗 Backup</a>` : ""}
       </div>
       <div>
         <span class="date-badge-label">Entrega master</span>
@@ -338,7 +339,6 @@ function renderTarefas() {
       </div>
       <div class="row-actions">
         ${state.role === "editor" ? `
-          <button class="task-edit-btn" data-edit-task="${t.id}">Editar</button>
           <button class="task-edit-btn" data-toggle-concluida="${t.id}">${t.concluida ? "Reabrir" : "✅ Concluir"}</button>
           <button class="task-edit-btn danger" data-del-task="${t.id}">Excluir</button>
         ` : ""}
@@ -388,7 +388,7 @@ function renderCronograma() {
           <p style="margin:0;font-size:13px">
             <button type="button" class="obra-link" data-goto-task="${e.taskId}" title="Ver tarefa">${e.titulo}${emojis}</button>
           </p>
-          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}</p>
+          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}${e.linkBackup ? ` · <a href="${e.linkBackup}" target="_blank" rel="noopener" class="backup-link">🔗 Backup</a>` : ""}</p>
         </div>
         <span class="pill" style="color:${cor};border:1px solid ${cor}55;background:${cor}14">
           ${statusTxt}
@@ -721,7 +721,8 @@ function exportReportPDF() {
 
 function attachDynamicListeners() {
   document.querySelectorAll(".date-badge-value").forEach((el) => {
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (state.role !== "editor") return;
       const taskId = el.dataset.task;
       const field = el.dataset.field;
@@ -736,19 +737,25 @@ function attachDynamicListeners() {
     });
   });
 
+  document.querySelectorAll("[data-stop-card-click]").forEach((el) => {
+    el.addEventListener("click", (e) => e.stopPropagation());
+  });
+
   document.querySelectorAll("[data-toggle-concluida]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const taskId = btn.dataset.toggleConcluida;
       const task = state.tasks.find((t) => t.id === taskId);
       db.collection("tasks").doc(taskId).update({ concluida: !task.concluida });
     });
   });
 
-  document.querySelectorAll("[data-edit-task]").forEach((btn) => {
-    btn.addEventListener("click", () => openTaskModal(btn.dataset.editTask));
+  document.querySelectorAll("[data-view-task]").forEach((card) => {
+    card.addEventListener("click", () => openTaskModal(card.dataset.viewTask));
   });
   document.querySelectorAll("[data-del-task]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (confirm("Excluir esta tarefa? Essa ação não pode ser desfeita.")) {
         db.collection("tasks").doc(btn.dataset.delTask).delete();
       }
@@ -929,7 +936,8 @@ function openTaskModal(taskId) {
   state.editingTaskId = taskId || null;
   const task = taskId ? state.tasks.find((t) => t.id === taskId) : null;
 
-  document.getElementById("task-modal-title").textContent = task ? "Editar Tarefa" : "Nova Tarefa";
+  const isEditor = state.role === "editor";
+  document.getElementById("task-modal-title").textContent = task ? (isEditor ? "Editar Tarefa" : "Ver Tarefa") : "Nova Tarefa";
   document.getElementById("save-task-btn").textContent = task ? "Salvar alterações" : "Salvar tarefa";
 
   fillSelect("f-artista", state.artistas.map((a) => a.nome));
@@ -958,7 +966,20 @@ function openTaskModal(taskId) {
     : { link: "", confirmada: false };
   updateMixStatusLabel();
 
+  setTaskFormEditable(state.role === "editor");
+
   taskModal.classList.remove("hidden");
+}
+
+function setTaskFormEditable(editable) {
+  document.querySelectorAll("#task-modal input, #task-modal select, #task-modal textarea").forEach((el) => {
+    el.disabled = !editable;
+  });
+  document.querySelectorAll('#task-modal [data-add]').forEach((btn) => {
+    btn.classList.toggle("hidden", !editable);
+  });
+  document.getElementById("f-mix-ok-btn").classList.toggle("hidden", !editable);
+  document.getElementById("save-task-btn").classList.toggle("hidden", !editable);
 }
 
 document.getElementById("new-task-btn").addEventListener("click", () => openTaskModal(null));

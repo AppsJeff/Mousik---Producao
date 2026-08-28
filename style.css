@@ -421,6 +421,15 @@ body {
 }
 
 .task-card { position: relative; }
+.task-card.clickable { cursor: pointer; }
+.backup-link {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .task-edit-btn {
   background: transparent;
   border: 1px solid var(--line);
