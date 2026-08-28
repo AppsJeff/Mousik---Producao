@@ -25,8 +25,8 @@ let state = {
   obras: [],      // [{id, titulo, editoras:[nome], letra, autores:[{nome,percentual}]}]
   editingTaskId: null,
   editingObraId: null,
+  viewingObraId: null,
   obraAutoresDraft: [],
-  obraEditorasDraft: [],
   filter: { type: "todos", value: "" },
   taskMixDraft: { link: "", confirmada: false },
   mixOkContext: { mode: "draft", taskId: null },
@@ -139,7 +139,6 @@ function listenToData() {
   });
   db.collection("editoras").orderBy("nome").onSnapshot((snap) => {
     state.editoras = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
-    fillObraEditoraSelect();
     render();
   });
   db.collection("obras").orderBy("titulo").onSnapshot((snap) => {
@@ -178,15 +177,11 @@ function fillObraAutorSelect() {
   el.innerHTML = state.autores.map((a) => `<option value="${a.nome}">${a.nome}</option>`).join("");
 }
 
-function fillObraEditoraSelect() {
-  const el = document.getElementById("o-add-editora-select");
-  if (!el) return;
-  el.innerHTML = state.editoras.map((e) => `<option value="${e.nome}">${e.nome}</option>`).join("");
-}
-
 function obraEditorasList(o) {
-  if (o.editoras && o.editoras.length) return o.editoras;
-  if (o.editora) return [o.editora]; // compatibilidade com obras cadastradas antes desta mudança
+  const dosAutores = [...new Set((o.autores || []).map((a) => a.editora).filter(Boolean))];
+  if (dosAutores.length) return dosAutores;
+  if (o.editoras && o.editoras.length) return o.editoras; // compatibilidade com cadastros antigos
+  if (o.editora) return [o.editora]; // compatibilidade com cadastros ainda mais antigos
   return [];
 }
 
@@ -526,19 +521,17 @@ function renderObras() {
       <p style="font-size:11px">${state.role === "editor" ? 'Use o botão "Nova Obra" para começar.' : "Volte em breve."}</p></div>`;
   }
   return `<div class="people-grid">${state.obras.map((o) => {
-    const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%)`).join(", ") || "—";
+    const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—";
     const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
-    return `<div class="people-card" id="obra-card-${o.id}">
+    return `<div class="people-card clickable" id="obra-card-${o.id}" data-view-obra="${o.id}">
       <div class="people-card-header">
         <p style="margin:0;font-size:14px">${o.titulo}</p>
         ${state.role === "editor" ? `
           <div class="row-actions">
-            <button class="task-edit-btn" data-edit-obra="${o.id}">Editar</button>
             <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
           </div>` : ""}
       </div>
       <p class="obra-meta">Autores: ${autoresTxt}</p>
-      <p class="obra-meta">Editoras: ${obraEditorasList(o).join(", ") || "—"}</p>
       ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
         <span>${t.titulo}</span>
         <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
@@ -656,10 +649,10 @@ function getReportRows() {
       obras = obras.filter((o) => obraEditorasList(o).includes(filterValue));
     }
     return {
-      headers: ["Título", "Autores", "Editoras"],
+      headers: ["Título", "Autores (% — Editora)", "Editoras"],
       data: obras.map((o) => [
         o.titulo,
-        (o.autores || []).map((a) => `${a.nome} (${a.percentual}%)`).join(", ") || "—",
+        (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—",
         obraEditorasList(o).join(", ") || "—",
       ]),
     };
@@ -775,11 +768,12 @@ function attachDynamicListeners() {
     });
   });
 
-  document.querySelectorAll("[data-edit-obra]").forEach((btn) => {
-    btn.addEventListener("click", () => openObraModal(btn.dataset.editObra));
+  document.querySelectorAll("[data-view-obra]").forEach((card) => {
+    card.addEventListener("click", () => openObraViewModal(card.dataset.viewObra));
   });
   document.querySelectorAll("[data-del-obra]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (confirm("Excluir esta obra? As tarefas vinculadas a ela ficarão sem obra.")) {
         db.collection("obras").doc(btn.dataset.delObra).delete();
       }
@@ -899,9 +893,9 @@ function editPerson(id, collection) {
   }
 
   if (collection === "editoras") {
-    state.obras.filter((o) => obraEditorasList(o).includes(nomeAntigo)).forEach((o) => {
-      const novasEditoras = obraEditorasList(o).map((n) => n === nomeAntigo ? nomeNovo : n);
-      batch.update(db.collection("obras").doc(o.id), { editoras: novasEditoras, editora: firebase.firestore.FieldValue.delete() });
+    state.obras.filter((o) => (o.autores || []).some((a) => a.editora === nomeAntigo)).forEach((o) => {
+      const novosAutores = o.autores.map((a) => a.editora === nomeAntigo ? { ...a, editora: nomeNovo } : a);
+      batch.update(db.collection("obras").doc(o.id), { autores: novosAutores });
     });
   }
 
@@ -1091,15 +1085,44 @@ function openObraModal(obraId) {
   fillObraAutorSelect();
   renderObraAutoresDraft();
 
-  state.obraEditorasDraft = obra ? [...obraEditorasList(obra)] : [];
-  fillObraEditoraSelect();
-  renderObraEditorasDraft();
-
   obraModal.classList.remove("hidden");
 }
 
 document.getElementById("new-obra-btn").addEventListener("click", () => openObraModal(null));
 document.getElementById("close-obra-modal-btn").addEventListener("click", () => obraModal.classList.add("hidden"));
+
+/* ---------------------- VER OBRA (somente leitura) ---------------------- */
+
+const obraViewModal = document.getElementById("obra-view-modal");
+
+function openObraViewModal(obraId) {
+  const obra = state.obras.find((o) => o.id === obraId);
+  if (!obra) return;
+  state.viewingObraId = obraId;
+
+  document.getElementById("ov-titulo").textContent = obra.titulo;
+
+  const autores = obra.autores || [];
+  document.getElementById("ov-autores-list").innerHTML = autores.length === 0
+    ? `<p class="field-hint">Nenhum autor cadastrado</p>`
+    : autores.map((a) => `
+        <div class="people-task-row">
+          <span>${a.nome}${a.editora ? ` — ${a.editora}` : ""}</span>
+          <span class="pill" style="color:#E8C468;border:1px solid #E8C46855;background:#E8C46814">${a.percentual}%</span>
+        </div>
+      `).join("");
+
+  document.getElementById("ov-letra").textContent = obra.letra || "Sem letra cadastrada.";
+
+  document.getElementById("obra-view-edit-btn").classList.toggle("hidden", state.role !== "editor");
+  obraViewModal.classList.remove("hidden");
+}
+
+document.getElementById("close-obra-view-modal-btn").addEventListener("click", () => obraViewModal.classList.add("hidden"));
+document.getElementById("obra-view-edit-btn").addEventListener("click", () => {
+  obraViewModal.classList.add("hidden");
+  openObraModal(state.viewingObraId);
+});
 
 function renderObraAutoresDraft() {
   const list = document.getElementById("o-autores-list");
@@ -1108,6 +1131,10 @@ function renderObraAutoresDraft() {
       <span>${a.nome}</span>
       <input type="number" min="0" max="100" value="${a.percentual}" data-autor-idx="${i}" />
       <span>%</span>
+      <select data-autor-editora-idx="${i}">
+        <option value="">Sem editora</option>
+        ${state.editoras.map((e) => `<option value="${e.nome}" ${e.nome === a.editora ? "selected" : ""}>${e.nome}</option>`).join("")}
+      </select>
       <button type="button" data-remove-autor="${i}">✕</button>
     </div>
   `).join("");
@@ -1117,6 +1144,12 @@ function renderObraAutoresDraft() {
       const idx = Number(e.target.dataset.autorIdx);
       state.obraAutoresDraft[idx].percentual = Number(e.target.value) || 0;
       updateObraTotalLabel();
+    });
+  });
+  list.querySelectorAll("select[data-autor-editora-idx]").forEach((sel) => {
+    sel.addEventListener("change", (e) => {
+      const idx = Number(e.target.dataset.autorEditoraIdx);
+      state.obraAutoresDraft[idx].editora = e.target.value;
     });
   });
   list.querySelectorAll("[data-remove-autor]").forEach((btn) => {
@@ -1143,56 +1176,25 @@ document.getElementById("o-add-autor-btn").addEventListener("click", () => {
   const nome = select.value;
   if (!nome) { alert("Cadastre um autor na aba Autores primeiro."); return; }
   if (state.obraAutoresDraft.some((a) => a.nome === nome)) { alert("Esse autor já foi adicionado."); return; }
-  state.obraAutoresDraft.push({ nome, percentual: 0 });
+  state.obraAutoresDraft.push({ nome, percentual: 0, editora: "" });
   renderObraAutoresDraft();
-});
-
-function renderObraEditorasDraft() {
-  const list = document.getElementById("o-editoras-list");
-  if (state.obraEditorasDraft.length === 0) {
-    list.innerHTML = `<p class="field-hint">Nenhuma editora adicionada</p>`;
-    return;
-  }
-  list.innerHTML = state.obraEditorasDraft.map((nome, i) => `
-    <div class="autor-row">
-      <span>${nome}</span>
-      <button type="button" data-remove-editora="${i}">✕</button>
-    </div>
-  `).join("");
-
-  list.querySelectorAll("[data-remove-editora]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.removeEditora);
-      state.obraEditorasDraft.splice(idx, 1);
-      renderObraEditorasDraft();
-    });
-  });
-}
-
-document.getElementById("o-add-editora-btn").addEventListener("click", () => {
-  const select = document.getElementById("o-add-editora-select");
-  const nome = select.value;
-  if (!nome) { alert("Cadastre uma editora na aba Editoras primeiro."); return; }
-  if (state.obraEditorasDraft.includes(nome)) { alert("Essa editora já foi adicionada."); return; }
-  state.obraEditorasDraft.push(nome);
-  renderObraEditorasDraft();
 });
 
 document.getElementById("save-obra-btn").addEventListener("click", () => {
   const titulo = document.getElementById("o-titulo").value.trim();
   const letra = document.getElementById("o-letra").value.trim();
   const autores = state.obraAutoresDraft;
-  const editoras = state.obraEditorasDraft;
 
   if (!titulo) { alert("Preencha o título da obra."); return; }
   if (autores.length === 0) { alert("Adicione ao menos um autor."); return; }
   const total = autores.reduce((s, a) => s + (a.percentual || 0), 0);
   if (total !== 100) { alert(`Os percentuais precisam somar 100%. Atualmente somam ${total}%.`); return; }
 
-  const payload = { titulo, editoras, letra, autores };
+  const payload = { titulo, letra, autores };
 
   if (state.editingObraId) {
     payload.editora = firebase.firestore.FieldValue.delete();
+    payload.editoras = firebase.firestore.FieldValue.delete();
     db.collection("obras").doc(state.editingObraId).update(payload);
   } else {
     payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();

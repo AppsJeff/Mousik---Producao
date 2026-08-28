@@ -174,17 +174,11 @@
         <label class="field-label">Título da obra</label>
         <input id="o-titulo" type="text" placeholder="Ex: Bang" />
 
-        <label class="field-label">Editoras</label>
-        <div id="o-editoras-list"></div>
-        <div class="select-row" style="margin-top:6px">
-          <select id="o-add-editora-select"></select>
-          <button type="button" id="o-add-editora-btn" class="btn-small">+ Adicionar editora</button>
-        </div>
-
         <label class="field-label">Letra</label>
         <textarea id="o-letra" rows="4" placeholder="Letra da música"></textarea>
 
-        <label class="field-label">Autores e percentuais</label>
+        <label class="field-label">Autores, percentuais e editoras</label>
+        <p class="field-hint">Ex: Pitiko 25% — Editora Mousik</p>
         <div id="o-autores-list"></div>
         <div class="select-row" style="margin-top:6px">
           <select id="o-add-autor-select"></select>
@@ -194,6 +188,24 @@
       </div>
 
       <button id="save-obra-btn" class="btn-primary btn-full">Salvar obra</button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: VER OBRA (somente leitura) ===================== -->
+  <div id="obra-view-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <p id="ov-titulo">Obra</p>
+        <button id="close-obra-view-modal-btn" class="btn-icon">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="field-label">Autores, percentuais e editoras</p>
+        <div id="ov-autores-list"></div>
+
+        <p class="field-label" style="margin-top:14px">Letra</p>
+        <p id="ov-letra" class="obra-view-letra"></p>
+      </div>
+      <button id="obra-view-edit-btn" class="btn-primary btn-full">Editar</button>
     </div>
   </div>
 
