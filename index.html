@@ -134,6 +134,9 @@
           </div>
         </div>
 
+        <label class="field-label" style="margin-top:14px">Observações / Recall</label>
+        <textarea id="f-observacoes" rows="3" placeholder="Anotações ou o que precisa ser refeito no recall"></textarea>
+
         <label class="checkbox-label" style="margin-top:14px">
           <input id="f-concluida" type="checkbox" /> ✅ Marcar tarefa como concluída
         </label>
@@ -171,12 +174,11 @@
         <label class="field-label">Título da obra</label>
         <input id="o-titulo" type="text" placeholder="Ex: Bang" />
 
-        <label class="field-label">Editora</label>
-        <div class="select-row">
-          <select id="o-editora">
-            <option value="">— Nenhuma —</option>
-          </select>
-          <button type="button" class="btn-small" data-add="editoras">+ Novo</button>
+        <label class="field-label">Editoras</label>
+        <div id="o-editoras-list"></div>
+        <div class="select-row" style="margin-top:6px">
+          <select id="o-add-editora-select"></select>
+          <button type="button" id="o-add-editora-btn" class="btn-small">+ Adicionar editora</button>
         </div>
 
         <label class="field-label">Letra</label>
