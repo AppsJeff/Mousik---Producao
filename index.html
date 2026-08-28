@@ -128,9 +128,8 @@
           <div>
             <label class="field-label">Entrega da master</label>
             <input id="f-master-data" type="date" />
-            <label class="checkbox-label">
-              <input id="f-master-conf" type="checkbox" /> Confirmada
-            </label>
+            <button type="button" id="f-master-ok-btn" class="btn-small" style="margin-top:6px">🎧 Master OK</button>
+            <p id="f-master-status" class="field-hint"></p>
           </div>
         </div>
 
@@ -159,6 +158,22 @@
         <p class="field-hint">Sem esse link, a mixagem não pode ser marcada como concluída.</p>
       </div>
       <button id="save-mixok-btn" class="btn-primary btn-full">Confirmar Mix OK</button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: MASTER OK (link da master) ===================== -->
+  <div id="masterok-modal" class="modal-overlay hidden">
+    <div class="modal" style="width:360px">
+      <div class="modal-header">
+        <p>🎧 Confirmar Masterização</p>
+        <button id="close-masterok-modal-btn" class="btn-icon">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Link da master</label>
+        <input id="masterok-link" type="text" placeholder="https://..." />
+        <p class="field-hint">Sem esse link, a master não pode ser marcada como concluída.</p>
+      </div>
+      <button id="save-masterok-btn" class="btn-primary btn-full">Confirmar Master OK</button>
     </div>
   </div>
 

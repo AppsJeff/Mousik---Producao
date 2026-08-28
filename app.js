@@ -30,6 +30,8 @@ let state = {
   filter: { type: "todos", value: "" },
   taskMixDraft: { link: "", confirmada: false },
   mixOkContext: { mode: "draft", taskId: null },
+  taskMasterDraft: { link: "", confirmada: false },
+  masterOkContext: { mode: "draft", taskId: null },
   report: { type: "obras", filterType: "todas", filterValue: "" },
 };
 
@@ -104,8 +106,8 @@ auth.onAuthStateChanged(async (user) => {
 
     const roleDoc = await db.collection("roles").doc(user.uid).get();
     state.role = roleDoc.exists ? roleDoc.data().role : "leitor";
-    document.getElementById("role-label").textContent =
-      state.role === "editor" ? "Editor" : "Leitor";
+    const roleLabels = { editor: "Editor", produtor: "Produtor", leitor: "Leitor" };
+    document.getElementById("role-label").textContent = roleLabels[state.role] || "Leitor";
     updateHeaderButtons();
 
     listenToData();
@@ -336,6 +338,7 @@ function renderTarefas() {
       <div>
         <span class="date-badge-label">Entrega master</span>
         <span class="date-badge-value ${t.master.confirmada ? "confirmed" : (isAtrasada(t.master) ? "pending" : "")}" data-task="${t.id}" data-field="master">${fmt(t.master.data)}</span>
+        ${t.master.link ? `<a href="${t.master.link}" target="_blank" rel="noopener" class="backup-link" data-stop-card-click title="Abrir link da master">🔗 Master</a>` : ""}
       </div>
       <div class="row-actions">
         ${state.role === "editor" ? `
@@ -350,6 +353,7 @@ function renderTarefas() {
 function taskEmojis(t) {
   let out = "";
   if (t.mixagem && t.mixagem.confirmada && t.mixagem.linkBackup) out += " 💿";
+  if (t.master && t.master.confirmada && t.master.link) out += " 🎧";
   if (t.concluida) out += " ✅";
   if (t.lancado) out += " 🚀";
   return out;
@@ -361,8 +365,16 @@ function renderCronograma() {
   const tasks = filteredTasks();
   const events = [];
   tasks.forEach((t) => {
-    events.push({ taskId: t.id, titulo: t.titulo, tipo: "Mixagem", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida, temLink: !!(t.mixagem.confirmada && t.mixagem.linkBackup), ...t.mixagem });
-    events.push({ taskId: t.id, titulo: t.titulo, tipo: "Master", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida, temLink: false, ...t.master });
+    events.push({
+      taskId: t.id, titulo: t.titulo, tipo: "Mixagem", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida,
+      emoji: (t.mixagem.confirmada && t.mixagem.linkBackup) ? "💿" : "", linkUrl: t.mixagem.linkBackup || "",
+      data: t.mixagem.data, confirmada: t.mixagem.confirmada,
+    });
+    events.push({
+      taskId: t.id, titulo: t.titulo, tipo: "Master", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida,
+      emoji: (t.master.confirmada && t.master.link) ? "🎧" : "", linkUrl: t.master.link || "",
+      data: t.master.data, confirmada: t.master.confirmada,
+    });
   });
   events.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
 
@@ -378,7 +390,7 @@ function renderCronograma() {
     const atrasada = isAtrasada(e);
     const cor = e.confirmada ? "#9FE870" : atrasada ? "#E5544C" : "#F3F3F1";
     const statusTxt = e.confirmada ? "Confirmada" : atrasada ? "Atrasada" : "No prazo";
-    const emojis = `${e.temLink ? " 💿" : ""}${e.concluida ? " ✅" : ""}`;
+    const emojis = `${e.emoji ? " " + e.emoji : ""}${e.concluida ? " ✅" : ""}`;
     return `
     <div class="timeline-item">
       <div class="timeline-dot" style="background:${cor}"></div>
@@ -388,7 +400,7 @@ function renderCronograma() {
           <p style="margin:0;font-size:13px">
             <button type="button" class="obra-link" data-goto-task="${e.taskId}" title="Ver tarefa">${e.titulo}${emojis}</button>
           </p>
-          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}${e.linkBackup ? ` · <a href="${e.linkBackup}" target="_blank" rel="noopener" class="backup-link">🔗 Backup</a>` : ""}</p>
+          <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}${e.linkUrl ? ` · <a href="${e.linkUrl}" target="_blank" rel="noopener" class="backup-link">🔗 ${e.tipo === "Mixagem" ? "Backup" : "Master"}</a>` : ""}</p>
         </div>
         <span class="pill" style="color:${cor};border:1px solid ${cor}55;background:${cor}14">
           ${statusTxt}
@@ -415,8 +427,8 @@ function renderCalendario() {
   const byDay = {};
   tasks.forEach((t) => {
     [
-      { ...t.mixagem, tipo: "Mixagem", titulo: t.titulo, taskId: t.id, concluida: t.concluida, temLink: !!(t.mixagem.confirmada && t.mixagem.linkBackup) },
-      { ...t.master, tipo: "Master", titulo: t.titulo, taskId: t.id, concluida: t.concluida, temLink: false },
+      { ...t.mixagem, tipo: "Mixagem", titulo: t.titulo, taskId: t.id, concluida: t.concluida, emoji: (t.mixagem.confirmada && t.mixagem.linkBackup) ? "💿" : "" },
+      { ...t.master, tipo: "Master", titulo: t.titulo, taskId: t.id, concluida: t.concluida, emoji: (t.master.confirmada && t.master.link) ? "🎧" : "" },
     ].forEach((e) => {
       if (!e.data) return;
       const d = new Date(e.data);
@@ -436,7 +448,7 @@ function renderCalendario() {
       <div class="cal-day-num">${d}</div>
       ${items.map((e) => {
         const cor = e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#F3F3F1");
-        const emojis = `${e.temLink ? " 💿" : ""}${e.concluida ? " ✅" : ""}`;
+        const emojis = `${e.emoji ? " " + e.emoji : ""}${e.concluida ? " ✅" : ""}`;
         return `<button type="button" class="cal-event" data-goto-task="${e.taskId}" style="color:${cor}">● ${e.titulo} - ${e.tipo}${emojis}</button>`;
       }).join("")}
     </div>`;
@@ -723,17 +735,13 @@ function attachDynamicListeners() {
   document.querySelectorAll(".date-badge-value").forEach((el) => {
     el.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (state.role !== "editor") return;
       const taskId = el.dataset.task;
       const field = el.dataset.field;
-      if (field === "mixagem") {
+      if (field === "mixagem" && (state.role === "editor" || state.role === "produtor")) {
         openMixOkModal("inline", taskId);
-        return;
+      } else if (field === "master" && state.role === "editor") {
+        openMasterOkModal("inline", taskId);
       }
-      const task = state.tasks.find((t) => t.id === taskId);
-      db.collection("tasks").doc(taskId).update({
-        [`${field}.confirmada`]: !task[field].confirmada,
-      });
     });
   });
 
@@ -937,7 +945,10 @@ function openTaskModal(taskId) {
   const task = taskId ? state.tasks.find((t) => t.id === taskId) : null;
 
   const isEditor = state.role === "editor";
-  document.getElementById("task-modal-title").textContent = task ? (isEditor ? "Editar Tarefa" : "Ver Tarefa") : "Nova Tarefa";
+  const isProdutor = state.role === "produtor";
+  document.getElementById("task-modal-title").textContent = task
+    ? (isEditor ? "Editar Tarefa" : isProdutor ? "Tarefa — Mix OK / Observações" : "Ver Tarefa")
+    : "Nova Tarefa";
   document.getElementById("save-task-btn").textContent = task ? "Salvar alterações" : "Salvar tarefa";
 
   fillSelect("f-artista", state.artistas.map((a) => a.nome));
@@ -957,7 +968,6 @@ function openTaskModal(taskId) {
 
   document.getElementById("f-mix-data").value = task ? task.mixagem.data || "" : "";
   document.getElementById("f-master-data").value = task ? task.master.data || "" : "";
-  document.getElementById("f-master-conf").checked = task ? !!task.master.confirmada : false;
   document.getElementById("f-concluida").checked = task ? !!task.concluida : false;
   document.getElementById("f-observacoes").value = task ? task.observacoes || "" : "";
 
@@ -966,20 +976,30 @@ function openTaskModal(taskId) {
     : { link: "", confirmada: false };
   updateMixStatusLabel();
 
-  setTaskFormEditable(state.role === "editor");
+  state.taskMasterDraft = task
+    ? { link: task.master.link || "", confirmada: !!task.master.confirmada }
+    : { link: "", confirmada: false };
+  updateMasterStatusLabel();
+
+  setTaskFormEditable(state.role);
 
   taskModal.classList.remove("hidden");
 }
 
-function setTaskFormEditable(editable) {
+function setTaskFormEditable(role) {
+  const isEditor = role === "editor";
+  const isProdutor = role === "produtor";
+
   document.querySelectorAll("#task-modal input, #task-modal select, #task-modal textarea").forEach((el) => {
-    el.disabled = !editable;
+    const sempreLivre = isProdutor && el.id === "f-observacoes";
+    el.disabled = !isEditor && !sempreLivre;
   });
   document.querySelectorAll('#task-modal [data-add]').forEach((btn) => {
-    btn.classList.toggle("hidden", !editable);
+    btn.classList.toggle("hidden", !isEditor);
   });
-  document.getElementById("f-mix-ok-btn").classList.toggle("hidden", !editable);
-  document.getElementById("save-task-btn").classList.toggle("hidden", !editable);
+  document.getElementById("f-mix-ok-btn").classList.toggle("hidden", !(isEditor || isProdutor));
+  document.getElementById("f-master-ok-btn").classList.toggle("hidden", !isEditor);
+  document.getElementById("save-task-btn").classList.toggle("hidden", !(isEditor || isProdutor));
 }
 
 document.getElementById("new-task-btn").addEventListener("click", () => openTaskModal(null));
@@ -1044,6 +1064,50 @@ document.getElementById("save-mixok-btn").addEventListener("click", () => {
   mixokModal.classList.add("hidden");
 });
 
+/* ---------------------- MASTER OK (link da master) ---------------------- */
+
+const masterokModal = document.getElementById("masterok-modal");
+
+function openMasterOkModal(mode, taskId) {
+  state.masterOkContext = { mode, taskId };
+  const currentLink = mode === "draft"
+    ? state.taskMasterDraft.link
+    : ((state.tasks.find((t) => t.id === taskId) || {}).master || {}).link || "";
+  document.getElementById("masterok-link").value = currentLink;
+  masterokModal.classList.remove("hidden");
+}
+
+function updateMasterStatusLabel() {
+  const label = document.getElementById("f-master-status");
+  if (!label) return;
+  if (state.taskMasterDraft.confirmada && state.taskMasterDraft.link) {
+    label.textContent = "🎧 Master confirmada";
+    label.className = "field-hint ok";
+  } else {
+    label.textContent = "Master ainda não confirmada";
+    label.className = "field-hint";
+  }
+}
+
+document.getElementById("f-master-ok-btn").addEventListener("click", () => openMasterOkModal("draft", null));
+document.getElementById("close-masterok-modal-btn").addEventListener("click", () => masterokModal.classList.add("hidden"));
+
+document.getElementById("save-masterok-btn").addEventListener("click", () => {
+  const link = document.getElementById("masterok-link").value.trim();
+  if (!link) { alert("Preencha o link da master para confirmar."); return; }
+
+  if (state.masterOkContext.mode === "draft") {
+    state.taskMasterDraft = { link, confirmada: true };
+    updateMasterStatusLabel();
+  } else {
+    db.collection("tasks").doc(state.masterOkContext.taskId).update({
+      "master.confirmada": true,
+      "master.link": link,
+    });
+  }
+  masterokModal.classList.add("hidden");
+});
+
 document.getElementById("save-task-btn").addEventListener("click", () => {
   const titulo = document.getElementById("f-titulo").value.trim();
   const tipo = document.getElementById("f-tipo").value;
@@ -1055,7 +1119,6 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
   const obraTemp = document.getElementById("f-obra-temp").value.trim();
   const mixData = document.getElementById("f-mix-data").value;
   const masterData = document.getElementById("f-master-data").value;
-  const masterConf = document.getElementById("f-master-conf").checked;
   const concluida = document.getElementById("f-concluida").checked;
   const observacoes = document.getElementById("f-observacoes").value.trim();
 
@@ -1072,7 +1135,7 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
     titulo, tipo, artista, produtor, cliente, status,
     obraId, obraNome, concluida, observacoes,
     mixagem: { data: mixData, confirmada: state.taskMixDraft.confirmada, linkBackup: state.taskMixDraft.link },
-    master: { data: masterData, confirmada: masterConf },
+    master: { data: masterData, confirmada: state.taskMasterDraft.confirmada, link: state.taskMasterDraft.link },
   };
 
   if (state.editingTaskId) {

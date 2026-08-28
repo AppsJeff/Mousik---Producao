@@ -376,6 +376,13 @@ body {
   font-family: inherit;
   resize: vertical;
 }
+.modal input:disabled,
+.modal select:disabled,
+.modal textarea:disabled {
+  color: var(--muted);
+  opacity: 0.75;
+  cursor: not-allowed;
+}
 .field-hint {
   font-size: 11px;
   color: var(--muted);
