@@ -21,11 +21,15 @@ let state = {
   artistas: [],  // [{id, nome}]
   produtores: [], // [{id, nome}]
   autores: [],    // [{id, nome}]
+  editoras: [],   // [{id, nome}]
   obras: [],      // [{id, titulo, editora, letra, autores:[{nome,percentual}]}]
   editingTaskId: null,
   editingObraId: null,
   obraAutoresDraft: [],
   filter: { type: "todos", value: "" },
+  taskMixDraft: { link: "", confirmada: false },
+  mixOkContext: { mode: "draft", taskId: null },
+  report: { type: "obras", filterType: "todas", filterValue: "" },
 };
 
 function filteredTasks() {
@@ -34,6 +38,9 @@ function filteredTasks() {
   }
   if (state.filter.type === "artista" && state.filter.value) {
     return state.tasks.filter((t) => t.artista === state.filter.value);
+  }
+  if (state.filter.type === "cliente" && state.filter.value) {
+    return state.tasks.filter((t) => t.cliente === state.filter.value);
   }
   return state.tasks;
 }
@@ -49,6 +56,11 @@ function renderFilterBar() {
     valueOptions = state.artistas
       .map((a) => `<option value="${a.nome}" ${a.nome === value ? "selected" : ""}>${a.nome}</option>`)
       .join("");
+  } else if (type === "cliente") {
+    const clientes = [...new Set(state.tasks.map((t) => t.cliente).filter(Boolean))].sort();
+    valueOptions = clientes
+      .map((c) => `<option value="${c}" ${c === value ? "selected" : ""}>${c}</option>`)
+      .join("");
   }
   return `
     <div class="filter-bar">
@@ -56,6 +68,7 @@ function renderFilterBar() {
         <option value="todos" ${type === "todos" ? "selected" : ""}>Todas as tarefas</option>
         <option value="produtor" ${type === "produtor" ? "selected" : ""}>Por produtor</option>
         <option value="artista" ${type === "artista" ? "selected" : ""}>Por artista</option>
+        <option value="cliente" ${type === "cliente" ? "selected" : ""}>Por cliente</option>
       </select>
       ${type !== "todos" ? `
         <select id="filter-value">
@@ -123,6 +136,11 @@ function listenToData() {
     fillObraAutorSelect();
     render();
   });
+  db.collection("editoras").orderBy("nome").onSnapshot((snap) => {
+    state.editoras = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
+    fillSelectWithBlank("o-editora", state.editoras.map((e) => e.nome), "— Nenhuma —");
+    render();
+  });
   db.collection("obras").orderBy("titulo").onSnapshot((snap) => {
     state.obras = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     fillObraSelect();
@@ -135,6 +153,13 @@ function fillSelect(id, options) {
   const current = el.value;
   el.innerHTML = options.map((o) => `<option value="${o}">${o}</option>`).join("");
   if (options.includes(current)) el.value = current;
+}
+
+function fillSelectWithBlank(id, options, blankLabel) {
+  const el = document.getElementById(id);
+  const current = el.value;
+  el.innerHTML = `<option value="">${blankLabel}</option>` + options.map((o) => `<option value="${o}">${o}</option>`).join("");
+  if ([...el.options].some((op) => op.value === current)) el.value = current;
 }
 
 function fillObraSelect() {
@@ -181,6 +206,23 @@ function gotoObra(obraId) {
   }, 50);
 }
 
+function gotoTask(taskId) {
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
+  const tarefasNavBtn = document.querySelector('.nav-item[data-tab="tarefas"]');
+  if (tarefasNavBtn) tarefasNavBtn.classList.add("active");
+  state.tab = "tarefas";
+  updateHeaderButtons();
+  render();
+  setTimeout(() => {
+    const el = document.getElementById(`task-card-${taskId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("highlight");
+      setTimeout(() => el.classList.remove("highlight"), 2200);
+    }
+  }, 50);
+}
+
 function updateHeaderButtons() {
   document.getElementById("new-task-btn").classList.toggle(
     "hidden",
@@ -196,10 +238,13 @@ const TAB_META = {
   tarefas: { eyebrow: "Tarefas", title: "Tarefas em produção" },
   cronograma: { eyebrow: "Cronograma", title: "Cronograma de entregas" },
   calendario: { eyebrow: "Calendário", title: "Calendário de entregas" },
+  lancamentos: { eyebrow: "Lançamentos", title: "Lançamentos" },
   artistas: { eyebrow: "Artistas", title: "Artistas" },
   produtores: { eyebrow: "Produtores", title: "Produtores" },
   autores: { eyebrow: "Autores", title: "Autores" },
+  editoras: { eyebrow: "Editoras", title: "Editoras" },
   obras: { eyebrow: "Obras", title: "Obras" },
+  relatorio: { eyebrow: "Relatório", title: "Relatórios" },
 };
 
 /* ---------------------- RENDER PRINCIPAL ---------------------- */
@@ -216,7 +261,10 @@ function render() {
   if (state.tab === "artistas") content.innerHTML = renderPessoas("artista", state.artistas, "artistas");
   if (state.tab === "produtores") content.innerHTML = renderPessoas("produtor", state.produtores, "produtores");
   if (state.tab === "autores") content.innerHTML = renderPessoas(null, state.autores, "autores");
+  if (state.tab === "editoras") content.innerHTML = renderPessoas(null, state.editoras, "editoras");
   if (state.tab === "obras") content.innerHTML = renderObras();
+  if (state.tab === "lancamentos") content.innerHTML = renderLancamentos();
+  if (state.tab === "relatorio") content.innerHTML = renderRelatorio();
 
   attachDynamicListeners();
 }
@@ -263,17 +311,17 @@ function renderTarefas() {
     return `<div class="empty-state"><p>Nenhuma tarefa encontrada com esse filtro</p></div>`;
   }
   return tasks.map((t) => `
-    <div class="task-card">
+    <div class="task-card" id="task-card-${t.id}">
       <div>
-        <p class="task-title">${t.titulo}</p>
-        <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraBadge(t)}</p>
+        <p class="task-title">${t.titulo} ${taskEmojis(t)}</p>
+        <p class="task-sub">${t.artista || "Sem artista vinculado"} · Obra: ${obraBadge(t)}${t.cliente ? ` · Cliente: ${t.cliente}` : ""}</p>
       </div>
       <span class="pill" style="color:#8C8C88;border:1px solid #8C8C8855;background:#8C8C8814">${t.tipo}</span>
       <span style="font-size:12px;color:#8C8C88">${t.produtor}</span>
       <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
       <div>
         <span class="date-badge-label">Entrega mixagem</span>
-        <span class="date-badge-value ${t.mixagem.confirmada ? "confirmed" : (isAtrasada(t.mixagem) ? "pending" : "")}" data-task="${t.id}" data-field="mixagem">${fmt(t.mixagem.data)}</span>
+        <span class="date-badge-value ${t.mixagem.confirmada ? "confirmed" : (isAtrasada(t.mixagem) ? "pending" : "")}" data-task="${t.id}" data-field="mixagem" title="Clique para confirmar com Mix OK">${fmt(t.mixagem.data)}</span>
       </div>
       <div>
         <span class="date-badge-label">Entrega master</span>
@@ -282,11 +330,20 @@ function renderTarefas() {
       <div class="row-actions">
         ${state.role === "editor" ? `
           <button class="task-edit-btn" data-edit-task="${t.id}">Editar</button>
+          <button class="task-edit-btn" data-toggle-concluida="${t.id}">${t.concluida ? "Reabrir" : "✅ Concluir"}</button>
           <button class="task-edit-btn danger" data-del-task="${t.id}">Excluir</button>
         ` : ""}
       </div>
     </div>
   `).join("");
+}
+
+function taskEmojis(t) {
+  let out = "";
+  if (t.mixagem && t.mixagem.confirmada && t.mixagem.linkBackup) out += " 💿";
+  if (t.concluida) out += " ✅";
+  if (t.lancado) out += " 🚀";
+  return out;
 }
 
 /* ---------------------- CRONOGRAMA ---------------------- */
@@ -295,8 +352,8 @@ function renderCronograma() {
   const tasks = filteredTasks();
   const events = [];
   tasks.forEach((t) => {
-    events.push({ titulo: t.titulo, tipo: "Mixagem", obraId: t.obraId, obraNome: t.obraNome, ...t.mixagem });
-    events.push({ titulo: t.titulo, tipo: "Master", obraId: t.obraId, obraNome: t.obraNome, ...t.master });
+    events.push({ taskId: t.id, titulo: t.titulo, tipo: "Mixagem", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida, temLink: !!(t.mixagem.confirmada && t.mixagem.linkBackup), ...t.mixagem });
+    events.push({ taskId: t.id, titulo: t.titulo, tipo: "Master", obraId: t.obraId, obraNome: t.obraNome, concluida: t.concluida, temLink: false, ...t.master });
   });
   events.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
 
@@ -312,13 +369,16 @@ function renderCronograma() {
     const atrasada = isAtrasada(e);
     const cor = e.confirmada ? "#9FE870" : atrasada ? "#E5544C" : "#F3F3F1";
     const statusTxt = e.confirmada ? "Confirmada" : atrasada ? "Atrasada" : "No prazo";
+    const emojis = `${e.temLink ? " 💿" : ""}${e.concluida ? " ✅" : ""}`;
     return `
     <div class="timeline-item">
       <div class="timeline-dot" style="background:${cor}"></div>
       <div class="timeline-date">${fmt(e.data)}</div>
       <div class="timeline-card" style="border-color:${atrasada ? "#E5544C55" : "#262626"}">
         <div>
-          <p style="margin:0;font-size:13px">${e.titulo}</p>
+          <p style="margin:0;font-size:13px">
+            <button type="button" class="obra-link" data-goto-task="${e.taskId}" title="Ver tarefa">${e.titulo}${emojis}</button>
+          </p>
           <p style="margin:3px 0 0;font-size:11px;color:#8C8C88">Entrega de ${e.tipo} · Obra: ${obraBadge(e)}</p>
         </div>
         <span class="pill" style="color:${cor};border:1px solid ${cor}55;background:${cor}14">
@@ -345,7 +405,10 @@ function renderCalendario() {
 
   const byDay = {};
   tasks.forEach((t) => {
-    [{ ...t.mixagem, tipo: "Mixagem", titulo: t.titulo }, { ...t.master, tipo: "Master", titulo: t.titulo }].forEach((e) => {
+    [
+      { ...t.mixagem, tipo: "Mixagem", titulo: t.titulo, taskId: t.id, concluida: t.concluida, temLink: !!(t.mixagem.confirmada && t.mixagem.linkBackup) },
+      { ...t.master, tipo: "Master", titulo: t.titulo, taskId: t.id, concluida: t.concluida, temLink: false },
+    ].forEach((e) => {
       if (!e.data) return;
       const d = new Date(e.data);
       if (d.getFullYear() === year && d.getMonth() === month) {
@@ -362,7 +425,11 @@ function renderCalendario() {
     const items = byDay[d] || [];
     cells += `<div class="cal-cell">
       <div class="cal-day-num">${d}</div>
-      ${items.map((e) => `<p class="cal-event" style="color:${e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#F3F3F1")}">● ${e.tipo}</p>`).join("")}
+      ${items.map((e) => {
+        const cor = e.confirmada ? "#9FE870" : (isAtrasada(e) ? "#E5544C" : "#F3F3F1");
+        const emojis = `${e.temLink ? " 💿" : ""}${e.concluida ? " ✅" : ""}`;
+        return `<button type="button" class="cal-event" data-goto-task="${e.taskId}" style="color:${cor}">● ${e.titulo} - ${e.tipo}${emojis}</button>`;
+      }).join("")}
     </div>`;
   }
 
@@ -382,7 +449,7 @@ function renderCalendario() {
 /* ---------------------- ARTISTAS / PRODUTORES / AUTORES ---------------------- */
 
 function renderPessoas(taskField, people, collection) {
-  const label = { artistas: "artista", produtores: "produtor", autores: "autor" }[collection];
+  const label = { artistas: "artista", produtores: "produtor", autores: "autor", editoras: "editora" }[collection];
   const addRow = state.role === "editor"
     ? `<div class="people-add">
         <input id="new-person-input" data-collection="${collection}" placeholder="Nome do novo ${label}" />
@@ -400,6 +467,9 @@ function renderPessoas(taskField, people, collection) {
     const related = taskField ? state.tasks.filter((t) => t[taskField] === name) : [];
     const obrasDoAutor = collection === "autores"
       ? state.obras.filter((o) => (o.autores || []).some((a) => a.nome === name))
+      : [];
+    const obrasDaEditora = collection === "editoras"
+      ? state.obras.filter((o) => o.editora === name)
       : [];
     return `<div class="people-card">
       <div class="people-card-header">
@@ -422,6 +492,11 @@ function renderPessoas(taskField, people, collection) {
               const pct = (o.autores.find((a) => a.nome === name) || {}).percentual ?? 0;
               return `<div class="people-task-row"><span>${o.titulo}</span><span class="pill" style="color:#E8C468;border:1px solid #E8C46855;background:#E8C46814">${pct}%</span></div>`;
             }).join("")
+      ) : ""}
+      ${collection === "editoras" ? (
+        obrasDaEditora.length === 0
+          ? `<p style="font-size:11px;color:#8C8C88">Nenhuma obra vinculada</p>`
+          : obrasDaEditora.map((o) => `<div class="people-task-row"><span>${o.titulo}</span></div>`).join("")
       ) : ""}
     </div>`;
   }).join("");
@@ -458,6 +533,183 @@ function renderObras() {
   }).join("")}</div>`;
 }
 
+/* ---------------------- LANÇAMENTOS ---------------------- */
+
+function renderLancamentos() {
+  const concluidas = state.tasks.filter((t) => t.concluida);
+  if (concluidas.length === 0) {
+    return `<div class="empty-state"><p>Nenhum lançamento ainda</p>
+      <p style="font-size:11px">Quando uma tarefa for marcada como concluída, ela aparece aqui.</p></div>`;
+  }
+  return concluidas.map((t) => `
+    <div class="task-card lancamento-card">
+      <div>
+        <p class="task-title">${t.titulo} ${t.lancado ? "🚀" : ""}</p>
+        <p class="task-sub">${t.artista || "Sem artista"} · ${t.cliente ? `Cliente: ${t.cliente}` : "Sem cliente"} · Obra: ${obraBadge(t)}</p>
+      </div>
+      <div>
+        <span class="date-badge-label">Data de lançamento</span>
+        <input type="date" class="lancamento-date-input" value="${t.lancamentoData || ""}" data-lancamento-data="${t.id}" ${state.role !== "editor" ? "disabled" : ""} />
+      </div>
+      <div class="row-actions">
+        ${state.role === "editor" ? `
+          <button class="task-edit-btn" data-toggle-lancado="${t.id}">${t.lancado ? "Desfazer lançado" : "🚀 Lançado"}</button>
+        ` : ""}
+      </div>
+    </div>
+  `).join("");
+}
+
+/* ---------------------- RELATÓRIO ---------------------- */
+
+function renderRelatorio() {
+  const type = state.report.type;
+  const filterType = state.report.filterType;
+  const filterValue = state.report.filterValue;
+
+  const typeTabs = `
+    <div class="report-type-tabs">
+      <button type="button" class="report-type-btn ${type === "obras" ? "active" : ""}" data-report-type="obras">Relatório de Obras</button>
+      <button type="button" class="report-type-btn ${type === "tarefas" ? "active" : ""}" data-report-type="tarefas">Relatório de Tarefas</button>
+      <button type="button" class="report-type-btn ${type === "atraso" ? "active" : ""}" data-report-type="atraso">Tarefas em Atraso</button>
+    </div>
+  `;
+
+  let filterOptions = "";
+  let valueOptions = "";
+  if (type === "obras") {
+    filterOptions = `
+      <option value="todas" ${filterType === "todas" ? "selected" : ""}>Todas</option>
+      <option value="autor" ${filterType === "autor" ? "selected" : ""}>Por autor</option>
+      <option value="editora" ${filterType === "editora" ? "selected" : ""}>Por editora</option>
+    `;
+    if (filterType === "autor") {
+      valueOptions = state.autores.map((a) => `<option value="${a.nome}" ${a.nome === filterValue ? "selected" : ""}>${a.nome}</option>`).join("");
+    } else if (filterType === "editora") {
+      valueOptions = state.editoras.map((e) => `<option value="${e.nome}" ${e.nome === filterValue ? "selected" : ""}>${e.nome}</option>`).join("");
+    }
+  } else {
+    filterOptions = `
+      <option value="todas" ${filterType === "todas" ? "selected" : ""}>Todos</option>
+      <option value="artista" ${filterType === "artista" ? "selected" : ""}>Por artista</option>
+      <option value="produtor" ${filterType === "produtor" ? "selected" : ""}>Por produtor</option>
+      <option value="cliente" ${filterType === "cliente" ? "selected" : ""}>Por cliente</option>
+    `;
+    if (filterType === "artista") {
+      valueOptions = state.artistas.map((a) => `<option value="${a.nome}" ${a.nome === filterValue ? "selected" : ""}>${a.nome}</option>`).join("");
+    } else if (filterType === "produtor") {
+      valueOptions = state.produtores.map((p) => `<option value="${p.nome}" ${p.nome === filterValue ? "selected" : ""}>${p.nome}</option>`).join("");
+    } else if (filterType === "cliente") {
+      const clientes = [...new Set(state.tasks.map((t) => t.cliente).filter(Boolean))].sort();
+      valueOptions = clientes.map((c) => `<option value="${c}" ${c === filterValue ? "selected" : ""}>${c}</option>`).join("");
+    }
+  }
+
+  const filterBar = `
+    <div class="filter-bar">
+      <select id="report-filter-type">${filterOptions}</select>
+      ${filterType !== "todas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
+    </div>
+  `;
+
+  const rows = getReportRows();
+  const preview = rows.length === 0
+    ? `<div class="empty-state"><p>Nenhum resultado para esse filtro</p></div>`
+    : `<div class="report-table-wrap"><table class="report-table"><thead><tr>${rows.headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>${rows.data.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+
+  return `
+    ${typeTabs}
+    ${filterBar}
+    <div class="report-actions">
+      <button id="report-excel-btn" class="btn-primary">⬇ Exportar Excel</button>
+      <button id="report-pdf-btn" class="btn-primary">⬇ Exportar PDF</button>
+    </div>
+    ${preview}
+  `;
+}
+
+function getReportRows() {
+  const type = state.report.type;
+  const filterType = state.report.filterType;
+  const filterValue = state.report.filterValue;
+
+  if (type === "obras") {
+    let obras = state.obras;
+    if (filterType === "autor" && filterValue) {
+      obras = obras.filter((o) => (o.autores || []).some((a) => a.nome === filterValue));
+    } else if (filterType === "editora" && filterValue) {
+      obras = obras.filter((o) => o.editora === filterValue);
+    }
+    return {
+      headers: ["Título", "Autores", "Editora"],
+      data: obras.map((o) => [
+        o.titulo,
+        (o.autores || []).map((a) => `${a.nome} (${a.percentual}%)`).join(", ") || "—",
+        o.editora || "—",
+      ]),
+    };
+  }
+
+  let tasks = state.tasks;
+  if (type === "atraso") {
+    tasks = tasks.filter((t) => isAtrasada(t.mixagem) || isAtrasada(t.master));
+  }
+  if (filterType === "artista" && filterValue) tasks = tasks.filter((t) => t.artista === filterValue);
+  if (filterType === "produtor" && filterValue) tasks = tasks.filter((t) => t.produtor === filterValue);
+  if (filterType === "cliente" && filterValue) tasks = tasks.filter((t) => t.cliente === filterValue);
+
+  return {
+    headers: ["Título", "Tipo", "Artista", "Produtor", "Cliente", "Status", "Entrega Mix", "Entrega Master", "Concluída"],
+    data: tasks.map((t) => [
+      t.titulo, t.tipo, t.artista || "—", t.produtor, t.cliente || "—", t.status,
+      fmt(t.mixagem.data), fmt(t.master.data), t.concluida ? "Sim" : "Não",
+    ]),
+  };
+}
+
+function reportTitle() {
+  const names = { obras: "Relatório de Obras", tarefas: "Relatório de Tarefas", atraso: "Tarefas em Atraso" };
+  return names[state.report.type];
+}
+
+function exportReportExcel() {
+  const rows = getReportRows();
+  if (rows.data.length === 0) { alert("Nenhum dado para exportar."); return; }
+  const ws = XLSX.utils.aoa_to_sheet([rows.headers, ...rows.data]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Relatório");
+  XLSX.writeFile(wb, `${reportTitle().replace(/\s+/g, "-")}.xlsx`);
+}
+
+function exportReportPDF() {
+  const rows = getReportRows();
+  if (rows.data.length === 0) { alert("Nenhum dado para exportar."); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFillColor(10, 10, 10);
+  doc.rect(0, 0, 210, 28, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text("MOUSIK", 14, 16);
+  doc.setFontSize(10);
+  doc.setTextColor(232, 196, 104);
+  doc.text(reportTitle().toUpperCase(), 14, 23);
+
+  doc.autoTable({
+    head: [rows.headers],
+    body: rows.data,
+    startY: 34,
+    theme: "grid",
+    headStyles: { fillColor: [18, 18, 18], textColor: [243, 243, 241], fontStyle: "bold" },
+    styles: { fontSize: 8, cellPadding: 3 },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+  });
+
+  doc.save(`${reportTitle().replace(/\s+/g, "-")}.pdf`);
+}
+
 /* ---------------------- LISTENERS DINÂMICOS (após cada render) ---------------------- */
 
 function attachDynamicListeners() {
@@ -466,10 +718,22 @@ function attachDynamicListeners() {
       if (state.role !== "editor") return;
       const taskId = el.dataset.task;
       const field = el.dataset.field;
+      if (field === "mixagem") {
+        openMixOkModal("inline", taskId);
+        return;
+      }
       const task = state.tasks.find((t) => t.id === taskId);
       db.collection("tasks").doc(taskId).update({
         [`${field}.confirmada`]: !task[field].confirmada,
       });
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-concluida]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const taskId = btn.dataset.toggleConcluida;
+      const task = state.tasks.find((t) => t.id === taskId);
+      db.collection("tasks").doc(taskId).update({ concluida: !task.concluida });
     });
   });
 
@@ -481,6 +745,19 @@ function attachDynamicListeners() {
       if (confirm("Excluir esta tarefa? Essa ação não pode ser desfeita.")) {
         db.collection("tasks").doc(btn.dataset.delTask).delete();
       }
+    });
+  });
+
+  document.querySelectorAll("[data-goto-obra]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      gotoObra(btn.dataset.gotoObra);
+    });
+  });
+  document.querySelectorAll("[data-goto-task]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      gotoTask(btn.dataset.gotoTask);
     });
   });
 
@@ -502,12 +779,46 @@ function attachDynamicListeners() {
     btn.addEventListener("click", () => deletePerson(btn.dataset.delPerson, btn.dataset.collection));
   });
 
-  document.querySelectorAll("[data-goto-obra]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      gotoObra(btn.dataset.gotoObra);
+  document.querySelectorAll("[data-lancamento-data]").forEach((el) => {
+    el.addEventListener("change", (e) => {
+      db.collection("tasks").doc(el.dataset.lancamentoData).update({ lancamentoData: e.target.value });
     });
   });
+  document.querySelectorAll("[data-toggle-lancado]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const taskId = btn.dataset.toggleLancado;
+      const task = state.tasks.find((t) => t.id === taskId);
+      db.collection("tasks").doc(taskId).update({ lancado: !task.lancado });
+    });
+  });
+
+  document.querySelectorAll("[data-report-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.report.type = btn.dataset.reportType;
+      state.report.filterType = "todas";
+      state.report.filterValue = "";
+      render();
+    });
+  });
+  const reportFilterTypeEl = document.getElementById("report-filter-type");
+  if (reportFilterTypeEl) {
+    reportFilterTypeEl.addEventListener("change", (e) => {
+      state.report.filterType = e.target.value;
+      state.report.filterValue = "";
+      render();
+    });
+  }
+  const reportFilterValueEl = document.getElementById("report-filter-value");
+  if (reportFilterValueEl) {
+    reportFilterValueEl.addEventListener("change", (e) => {
+      state.report.filterValue = e.target.value;
+      render();
+    });
+  }
+  const reportExcelBtn = document.getElementById("report-excel-btn");
+  if (reportExcelBtn) reportExcelBtn.addEventListener("click", exportReportExcel);
+  const reportPdfBtn = document.getElementById("report-pdf-btn");
+  if (reportPdfBtn) reportPdfBtn.addEventListener("click", exportReportPDF);
 
   const filterTypeEl = document.getElementById("filter-type");
   if (filterTypeEl) {
@@ -573,6 +884,12 @@ function editPerson(id, collection) {
     });
   }
 
+  if (collection === "editoras") {
+    state.obras.filter((o) => o.editora === nomeAntigo).forEach((o) => {
+      batch.update(db.collection("obras").doc(o.id), { editora: nomeNovo });
+    });
+  }
+
   batch.commit();
 }
 
@@ -585,6 +902,7 @@ function deletePerson(id, collection) {
   if (collection === "artistas") emUso = state.tasks.some((t) => t.artista === person.nome);
   if (collection === "produtores") emUso = state.tasks.some((t) => t.produtor === person.nome);
   if (collection === "autores") emUso = state.obras.some((o) => (o.autores || []).some((a) => a.nome === person.nome));
+  if (collection === "editoras") emUso = state.obras.some((o) => o.editora === person.nome);
 
   const aviso = emUso
     ? " Ele(a) está vinculado(a) a tarefas ou obras existentes, que manterão o nome mesmo após a exclusão."
@@ -614,15 +932,21 @@ function openTaskModal(taskId) {
   document.getElementById("f-artista-wrap").classList.toggle("hidden", task ? task.tipo === "Composição" : false);
   if (task && task.artista) document.getElementById("f-artista").value = task.artista;
   if (task && task.produtor) document.getElementById("f-produtor").value = task.produtor;
+  document.getElementById("f-cliente").value = task ? task.cliente || "" : "";
   document.getElementById("f-status").value = task ? task.status : "Composição";
 
   document.getElementById("f-obra").value = task && task.obraId ? task.obraId : "";
   document.getElementById("f-obra-temp").value = task && !task.obraId ? (task.obraNome || "") : "";
 
   document.getElementById("f-mix-data").value = task ? task.mixagem.data || "" : "";
-  document.getElementById("f-mix-conf").checked = task ? !!task.mixagem.confirmada : false;
   document.getElementById("f-master-data").value = task ? task.master.data || "" : "";
   document.getElementById("f-master-conf").checked = task ? !!task.master.confirmada : false;
+  document.getElementById("f-concluida").checked = task ? !!task.concluida : false;
+
+  state.taskMixDraft = task
+    ? { link: task.mixagem.linkBackup || "", confirmada: !!task.mixagem.confirmada }
+    : { link: "", confirmada: false };
+  updateMixStatusLabel();
 
   taskModal.classList.remove("hidden");
 }
@@ -637,11 +961,56 @@ document.getElementById("f-tipo").addEventListener("change", (e) => {
 document.querySelectorAll('[data-add]').forEach((btn) => {
   btn.addEventListener("click", () => {
     const collection = btn.dataset.add;
-    const name = prompt(`Nome do novo ${collection === "artistas" ? "artista" : "produtor"}:`);
+    const labelMap = { artistas: "artista", produtores: "produtor", editoras: "editora" };
+    const name = prompt(`Nome do novo ${labelMap[collection] || "item"}:`);
     if (name && name.trim()) {
       db.collection(collection).add({ nome: name.trim() });
     }
   });
+});
+
+/* ---------------------- MIX OK (link de backup) ---------------------- */
+
+const mixokModal = document.getElementById("mixok-modal");
+
+function openMixOkModal(mode, taskId) {
+  state.mixOkContext = { mode, taskId };
+  const currentLink = mode === "draft"
+    ? state.taskMixDraft.link
+    : ((state.tasks.find((t) => t.id === taskId) || {}).mixagem || {}).linkBackup || "";
+  document.getElementById("mixok-link").value = currentLink;
+  mixokModal.classList.remove("hidden");
+}
+
+function updateMixStatusLabel() {
+  const label = document.getElementById("f-mix-status");
+  if (!label) return;
+  if (state.taskMixDraft.confirmada && state.taskMixDraft.link) {
+    label.textContent = "💿 Mixagem confirmada";
+    label.className = "field-hint ok";
+  } else {
+    label.textContent = "Mixagem ainda não confirmada";
+    label.className = "field-hint";
+  }
+}
+
+document.getElementById("f-mix-ok-btn").addEventListener("click", () => openMixOkModal("draft", null));
+document.getElementById("close-mixok-modal-btn").addEventListener("click", () => mixokModal.classList.add("hidden"));
+
+document.getElementById("save-mixok-btn").addEventListener("click", () => {
+  const link = document.getElementById("mixok-link").value.trim();
+  if (!link) { alert("Preencha o link do backup para confirmar a mixagem."); return; }
+
+  if (state.mixOkContext.mode === "draft") {
+    state.taskMixDraft = { link, confirmada: true };
+    updateMixStatusLabel();
+  } else {
+    db.collection("tasks").doc(state.mixOkContext.taskId).update({
+      "mixagem.confirmada": true,
+      "mixagem.linkBackup": link,
+    });
+  }
+  mixokModal.classList.add("hidden");
 });
 
 document.getElementById("save-task-btn").addEventListener("click", () => {
@@ -649,13 +1018,14 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
   const tipo = document.getElementById("f-tipo").value;
   const artista = tipo === "Composição" ? null : document.getElementById("f-artista").value;
   const produtor = document.getElementById("f-produtor").value;
+  const cliente = document.getElementById("f-cliente").value.trim();
   const status = document.getElementById("f-status").value;
   const obraId = document.getElementById("f-obra").value || null;
   const obraTemp = document.getElementById("f-obra-temp").value.trim();
   const mixData = document.getElementById("f-mix-data").value;
-  const mixConf = document.getElementById("f-mix-conf").checked;
   const masterData = document.getElementById("f-master-data").value;
   const masterConf = document.getElementById("f-master-conf").checked;
+  const concluida = document.getElementById("f-concluida").checked;
 
   if (!titulo) { alert("Preencha o título da tarefa."); return; }
   if (tipo !== "Composição" && !artista) { alert("Selecione ou cadastre um artista."); return; }
@@ -667,15 +1037,17 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
     : obraTemp;
 
   const payload = {
-    titulo, tipo, artista, produtor, status,
-    obraId, obraNome,
-    mixagem: { data: mixData, confirmada: mixConf },
+    titulo, tipo, artista, produtor, cliente, status,
+    obraId, obraNome, concluida,
+    mixagem: { data: mixData, confirmada: state.taskMixDraft.confirmada, linkBackup: state.taskMixDraft.link },
     master: { data: masterData, confirmada: masterConf },
   };
 
   if (state.editingTaskId) {
     db.collection("tasks").doc(state.editingTaskId).update(payload);
   } else {
+    payload.lancamentoData = "";
+    payload.lancado = false;
     payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
     db.collection("tasks").add(payload);
   }

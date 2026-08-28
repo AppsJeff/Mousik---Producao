@@ -32,10 +32,13 @@
           <button class="nav-item active" data-tab="tarefas">Tarefas</button>
           <button class="nav-item" data-tab="cronograma">Cronograma</button>
           <button class="nav-item" data-tab="calendario">Calendário</button>
+          <button class="nav-item" data-tab="lancamentos">Lançamentos</button>
           <button class="nav-item" data-tab="artistas">Artistas</button>
           <button class="nav-item" data-tab="produtores">Produtores</button>
           <button class="nav-item" data-tab="autores">Autores</button>
+          <button class="nav-item" data-tab="editoras">Editoras</button>
           <button class="nav-item" data-tab="obras">Obras</button>
+          <button class="nav-item" data-tab="relatorio">Relatório</button>
         </nav>
       </div>
       <div class="sidebar-footer">
@@ -103,6 +106,9 @@
           <button type="button" class="btn-small" data-add="produtores">+ Novo</button>
         </div>
 
+        <label class="field-label">Cliente</label>
+        <input id="f-cliente" type="text" placeholder="Opcional — pra quem é a tarefa" />
+
         <label class="field-label">Status</label>
         <select id="f-status">
           <option>Composição</option>
@@ -116,9 +122,8 @@
           <div>
             <label class="field-label">Entrega da mixagem</label>
             <input id="f-mix-data" type="date" />
-            <label class="checkbox-label">
-              <input id="f-mix-conf" type="checkbox" /> Confirmada
-            </label>
+            <button type="button" id="f-mix-ok-btn" class="btn-small" style="margin-top:6px">💿 Mix OK</button>
+            <p id="f-mix-status" class="field-hint"></p>
           </div>
           <div>
             <label class="field-label">Entrega da master</label>
@@ -128,9 +133,29 @@
             </label>
           </div>
         </div>
+
+        <label class="checkbox-label" style="margin-top:14px">
+          <input id="f-concluida" type="checkbox" /> ✅ Marcar tarefa como concluída
+        </label>
       </div>
 
       <button id="save-task-btn" class="btn-primary btn-full">Salvar tarefa</button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: MIX OK (link de backup) ===================== -->
+  <div id="mixok-modal" class="modal-overlay hidden">
+    <div class="modal" style="width:360px">
+      <div class="modal-header">
+        <p>💿 Confirmar Mixagem</p>
+        <button id="close-mixok-modal-btn" class="btn-icon">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Link do backup para masterização</label>
+        <input id="mixok-link" type="text" placeholder="https://..." />
+        <p class="field-hint">Sem esse link, a mixagem não pode ser marcada como concluída.</p>
+      </div>
+      <button id="save-mixok-btn" class="btn-primary btn-full">Confirmar Mix OK</button>
     </div>
   </div>
 
@@ -147,7 +172,12 @@
         <input id="o-titulo" type="text" placeholder="Ex: Bang" />
 
         <label class="field-label">Editora</label>
-        <input id="o-editora" type="text" placeholder="Ex: Mousik Editora" />
+        <div class="select-row">
+          <select id="o-editora">
+            <option value="">— Nenhuma —</option>
+          </select>
+          <button type="button" class="btn-small" data-add="editoras">+ Novo</button>
+        </div>
 
         <label class="field-label">Letra</label>
         <textarea id="o-letra" rows="4" placeholder="Letra da música"></textarea>
@@ -169,6 +199,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <!-- Exportação de relatórios -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
   <script src="firebase-config.js"></script>
   <script src="app.js"></script>

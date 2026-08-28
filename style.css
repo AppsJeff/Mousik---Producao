@@ -291,7 +291,21 @@ body {
 }
 .cal-cell.empty { border: none; }
 .cal-day-num { color: var(--muted); }
-.cal-event { margin: 3px 0 0; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-event {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  margin: 3px 0 0;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
 
 /* ---------- Pessoas ---------- */
 .people-add {
@@ -423,12 +437,54 @@ body {
   text-underline-offset: 2px;
 }
 .obra-plain { color: var(--muted); }
-.people-card.highlight {
+.people-card.highlight,
+.task-card.highlight {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold);
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 .select-row { display: flex; gap: 8px; align-items: center; }
+
+/* ---------- Lançamentos ---------- */
+.lancamento-card { grid-template-columns: 1.6fr 1fr 1fr; }
+.lancamento-date-input {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+/* ---------- Relatório ---------- */
+.report-type-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.report-type-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.report-type-btn.active { color: var(--text); border-color: var(--gold); }
+.report-actions { display: flex; gap: 10px; margin: 16px 0; }
+.report-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.report-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.report-table th, .report-table td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.report-table th {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  background: var(--panel);
+}
 .select-row select { flex: 1; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
 .checkbox-label {
