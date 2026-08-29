@@ -535,11 +535,12 @@ function renderObras() {
   return `<div class="people-grid">${state.obras.map((o) => {
     const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—";
     const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
-    return `<div class="people-card clickable" id="obra-card-${o.id}" data-view-obra="${o.id}">
+    return `<div class="people-card clickable ${o.editado ? "editado" : ""}" id="obra-card-${o.id}" data-view-obra="${o.id}">
       <div class="people-card-header">
-        <p style="margin:0;font-size:14px">${o.titulo}</p>
+        <p style="margin:0;font-size:14px">${o.titulo}${o.editado ? " ✅" : ""}</p>
         ${state.role === "editor" ? `
           <div class="row-actions">
+            <button class="task-edit-btn" data-toggle-editado="${o.id}">${o.editado ? "Desfazer Editado" : "Editado"}</button>
             <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
           </div>` : ""}
       </div>
@@ -601,6 +602,7 @@ function renderRelatorio() {
       <option value="todas" ${filterType === "todas" ? "selected" : ""}>Todas</option>
       <option value="autor" ${filterType === "autor" ? "selected" : ""}>Por autor</option>
       <option value="editora" ${filterType === "editora" ? "selected" : ""}>Por editora</option>
+      <option value="editadas" ${filterType === "editadas" ? "selected" : ""}>Editadas</option>
     `;
     if (filterType === "autor") {
       valueOptions = state.autores.map((a) => `<option value="${a.nome}" ${a.nome === filterValue ? "selected" : ""}>${a.nome}</option>`).join("");
@@ -627,7 +629,7 @@ function renderRelatorio() {
   const filterBar = `
     <div class="filter-bar">
       <select id="report-filter-type">${filterOptions}</select>
-      ${filterType !== "todas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
+      ${filterType !== "todas" && filterType !== "editadas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
     </div>
   `;
 
@@ -659,13 +661,16 @@ function getReportRows() {
       obras = obras.filter((o) => (o.autores || []).some((a) => a.nome === filterValue));
     } else if (filterType === "editora" && filterValue) {
       obras = obras.filter((o) => obraEditorasList(o).includes(filterValue));
+    } else if (filterType === "editadas") {
+      obras = obras.filter((o) => o.editado);
     }
     return {
-      headers: ["Título", "Autores (% — Editora)", "Editoras"],
+      headers: ["Título", "Autores (% — Editora)", "Editoras", "Editado"],
       data: obras.map((o) => [
         o.titulo,
         (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—",
         obraEditorasList(o).join(", ") || "—",
+        o.editado ? "Sim" : "Não",
       ]),
     };
   }
@@ -785,6 +790,14 @@ function attachDynamicListeners() {
 
   document.querySelectorAll("[data-view-obra]").forEach((card) => {
     card.addEventListener("click", () => openObraViewModal(card.dataset.viewObra));
+  });
+  document.querySelectorAll("[data-toggle-editado]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const obraId = btn.dataset.toggleEditado;
+      const obra = state.obras.find((o) => o.id === obraId);
+      db.collection("obras").doc(obraId).update({ editado: !obra.editado });
+    });
   });
   document.querySelectorAll("[data-del-obra]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -1064,6 +1077,22 @@ document.getElementById("save-mixok-btn").addEventListener("click", () => {
   mixokModal.classList.add("hidden");
 });
 
+document.getElementById("remove-mixok-btn").addEventListener("click", () => {
+  if (!confirm("Remover a confirmação e o link da mixagem?")) return;
+
+  if (state.mixOkContext.mode === "draft") {
+    state.taskMixDraft = { link: "", confirmada: false };
+    updateMixStatusLabel();
+  } else {
+    db.collection("tasks").doc(state.mixOkContext.taskId).update({
+      "mixagem.confirmada": false,
+      "mixagem.linkBackup": firebase.firestore.FieldValue.delete(),
+    });
+  }
+  document.getElementById("mixok-link").value = "";
+  mixokModal.classList.add("hidden");
+});
+
 /* ---------------------- MASTER OK (link da master) ---------------------- */
 
 const masterokModal = document.getElementById("masterok-modal");
@@ -1105,6 +1134,22 @@ document.getElementById("save-masterok-btn").addEventListener("click", () => {
       "master.link": link,
     });
   }
+  masterokModal.classList.add("hidden");
+});
+
+document.getElementById("remove-masterok-btn").addEventListener("click", () => {
+  if (!confirm("Remover a confirmação e o link da master?")) return;
+
+  if (state.masterOkContext.mode === "draft") {
+    state.taskMasterDraft = { link: "", confirmada: false };
+    updateMasterStatusLabel();
+  } else {
+    db.collection("tasks").doc(state.masterOkContext.taskId).update({
+      "master.confirmada": false,
+      "master.link": firebase.firestore.FieldValue.delete(),
+    });
+  }
+  document.getElementById("masterok-link").value = "";
   masterokModal.classList.add("hidden");
 });
 
@@ -1184,7 +1229,7 @@ function openObraViewModal(obraId) {
   if (!obra) return;
   state.viewingObraId = obraId;
 
-  document.getElementById("ov-titulo").textContent = obra.titulo;
+  document.getElementById("ov-titulo").textContent = obra.titulo + (obra.editado ? " ✅" : "");
 
   const autores = obra.autores || [];
   document.getElementById("ov-autores-list").innerHTML = autores.length === 0

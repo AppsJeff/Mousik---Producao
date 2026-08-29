@@ -473,6 +473,10 @@ body {
   box-shadow: 0 0 0 1px var(--gold);
   transition: border-color 0.3s, box-shadow 0.3s;
 }
+.people-card.editado {
+  border-color: var(--green);
+  background: linear-gradient(0deg, #9FE87014, #9FE87014), var(--panel);
+}
 .select-row { display: flex; gap: 8px; align-items: center; }
 
 /* ---------- Lançamentos ---------- */
