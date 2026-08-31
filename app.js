@@ -22,6 +22,7 @@ let state = {
   produtores: [], // [{id, nome}]
   autores: [],    // [{id, nome}]
   editoras: [],   // [{id, nome}]
+  projetos: [],   // [{id, nome}]
   obras: [],      // [{id, titulo, editoras:[nome], letra, autores:[{nome,percentual}]}]
   editingTaskId: null,
   editingObraId: null,
@@ -32,7 +33,7 @@ let state = {
   mixOkContext: { mode: "draft", taskId: null },
   taskMasterDraft: { link: "", confirmada: false },
   masterOkContext: { mode: "draft", taskId: null },
-  report: { type: "obras", filterType: "todas", filterValue: "" },
+  report: { type: "obras", filterType: "todas", filterValue: "", periodoInicio: "", periodoFim: "" },
 };
 
 function filteredTasks() {
@@ -143,6 +144,11 @@ function listenToData() {
     state.editoras = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
     render();
   });
+  db.collection("projetos").orderBy("nome").onSnapshot((snap) => {
+    state.projetos = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
+    fillProjetoSelect();
+    render();
+  });
   db.collection("obras").orderBy("titulo").onSnapshot((snap) => {
     state.obras = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     fillObraSelect();
@@ -161,6 +167,14 @@ function fillSelectWithBlank(id, options, blankLabel) {
   const el = document.getElementById(id);
   const current = el.value;
   el.innerHTML = `<option value="">${blankLabel}</option>` + options.map((o) => `<option value="${o}">${o}</option>`).join("");
+  if ([...el.options].some((op) => op.value === current)) el.value = current;
+}
+
+function fillProjetoSelect() {
+  const el = document.getElementById("f-projeto");
+  if (!el) return;
+  const current = el.value;
+  el.innerHTML = `<option value="">— Nenhum —</option>` + state.projetos.map((p) => `<option value="${p.id}">${p.nome}</option>`).join("");
   if ([...el.options].some((op) => op.value === current)) el.value = current;
 }
 
@@ -245,10 +259,11 @@ function updateHeaderButtons() {
 }
 
 const TAB_META = {
-  tarefas: { eyebrow: "Tarefas", title: "Tarefas em produção" },
+  tarefas: { eyebrow: "Produção", title: "Tarefas em produção" },
   cronograma: { eyebrow: "Cronograma", title: "Cronograma de entregas" },
   calendario: { eyebrow: "Calendário", title: "Calendário de entregas" },
   lancamentos: { eyebrow: "Lançamentos", title: "Lançamentos" },
+  projetos: { eyebrow: "Projetos", title: "Projetos" },
   artistas: { eyebrow: "Artistas", title: "Artistas" },
   produtores: { eyebrow: "Produtores", title: "Produtores" },
   autores: { eyebrow: "Autores", title: "Autores" },
@@ -274,6 +289,7 @@ function render() {
   if (state.tab === "editoras") content.innerHTML = renderPessoas(null, state.editoras, "editoras");
   if (state.tab === "obras") content.innerHTML = renderObras();
   if (state.tab === "lancamentos") content.innerHTML = renderLancamentos();
+  if (state.tab === "projetos") content.innerHTML = renderProjetos();
   if (state.tab === "relatorio") content.innerHTML = renderRelatorio();
 
   attachDynamicListeners();
@@ -545,6 +561,7 @@ function renderObras() {
           </div>` : ""}
       </div>
       <p class="obra-meta">Autores: ${autoresTxt}</p>
+      ${!o.letra || !o.letra.trim() ? `<span class="pill" style="color:#E5544C;border:1px solid #E5544C55;background:#E5544C14;margin-top:4px;display:inline-block">Falta Letra</span>` : ""}
       ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
         <span>${t.titulo}</span>
         <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
@@ -580,6 +597,61 @@ function renderLancamentos() {
   `).join("");
 }
 
+/* ---------------------- PROJETOS ---------------------- */
+
+function renderProjetos() {
+  const addRow = state.role === "editor"
+    ? `<div class="people-add">
+        <input id="new-projeto-input" placeholder="Nome do novo projeto" />
+        <button class="btn-primary" id="new-projeto-btn" style="white-space:nowrap">+ Novo projeto</button>
+      </div>`
+    : "";
+
+  if (state.projetos.length === 0) {
+    return `${addRow}<div class="empty-state"><p>Nenhum projeto cadastrado ainda</p>
+      <p style="font-size:11px">${state.role === "editor" ? "Crie um projeto acima para começar a agrupar tarefas." : "Volte em breve."}</p></div>`;
+  }
+
+  const cards = state.projetos.map((p) => {
+    const tarefas = state.tasks.filter((t) => t.projetoId === p.id);
+    const disponiveis = state.tasks.filter((t) => t.projetoId !== p.id);
+    return `<div class="people-card">
+      <div class="people-card-header">
+        <p style="margin:0;font-size:14px">${p.nome}</p>
+        ${state.role === "editor" ? `
+          <div class="row-actions">
+            <button class="task-edit-btn" data-edit-person="${p.id}" data-collection="projetos">Editar</button>
+            <button class="task-edit-btn danger" data-del-person="${p.id}" data-collection="projetos">Excluir</button>
+          </div>` : ""}
+      </div>
+
+      ${tarefas.length === 0
+        ? `<p style="font-size:11px;color:#8C8C88">Nenhuma tarefa vinculada</p>`
+        : tarefas.map((t) => `<div class="people-task-row">
+            <span>${t.titulo}</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
+              ${state.role === "editor" ? `<button class="task-edit-btn danger" data-unlink-task="${t.id}" title="Remover do projeto">✕</button>` : ""}
+            </span>
+          </div>`).join("")
+      }
+
+      ${state.role === "editor" ? `
+        <div class="select-row" style="margin-top:10px">
+          <select data-projeto-link-select="${p.id}">
+            <option value="">Vincular tarefa existente...</option>
+            ${disponiveis.map((t) => `<option value="${t.id}">${t.titulo}</option>`).join("")}
+          </select>
+          <button type="button" class="btn-small" data-projeto-link-btn="${p.id}">Vincular</button>
+        </div>
+        <button type="button" class="btn-small" style="margin-top:8px" data-projeto-nova-tarefa="${p.id}">+ Nova tarefa neste projeto</button>
+      ` : ""}
+    </div>`;
+  }).join("");
+
+  return `${addRow}<div class="people-grid">${cards}</div>`;
+}
+
 /* ---------------------- RELATÓRIO ---------------------- */
 
 function renderRelatorio() {
@@ -603,6 +675,7 @@ function renderRelatorio() {
       <option value="autor" ${filterType === "autor" ? "selected" : ""}>Por autor</option>
       <option value="editora" ${filterType === "editora" ? "selected" : ""}>Por editora</option>
       <option value="editadas" ${filterType === "editadas" ? "selected" : ""}>Editadas</option>
+      <option value="nao-editadas" ${filterType === "nao-editadas" ? "selected" : ""}>Não editadas</option>
     `;
     if (filterType === "autor") {
       valueOptions = state.autores.map((a) => `<option value="${a.nome}" ${a.nome === filterValue ? "selected" : ""}>${a.nome}</option>`).join("");
@@ -629,9 +702,17 @@ function renderRelatorio() {
   const filterBar = `
     <div class="filter-bar">
       <select id="report-filter-type">${filterOptions}</select>
-      ${filterType !== "todas" && filterType !== "editadas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
+      ${filterType !== "todas" && filterType !== "editadas" && filterType !== "nao-editadas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
     </div>
   `;
+
+  const periodoBar = type !== "obras" ? `
+    <div class="filter-bar">
+      <label class="periodo-label">De <input type="date" id="report-periodo-inicio" value="${state.report.periodoInicio}" /></label>
+      <label class="periodo-label">Até <input type="date" id="report-periodo-fim" value="${state.report.periodoFim}" /></label>
+      ${(state.report.periodoInicio || state.report.periodoFim) ? `<button type="button" id="report-periodo-limpar" class="btn-small">Limpar período</button>` : ""}
+    </div>
+  ` : "";
 
   const rows = getReportRows();
   const preview = rows.length === 0
@@ -642,12 +723,21 @@ function renderRelatorio() {
   return `
     ${typeTabs}
     ${filterBar}
+    ${periodoBar}
     <div class="report-actions">
       <button id="report-excel-btn" class="btn-primary">⬇ Exportar Excel</button>
       <button id="report-pdf-btn" class="btn-primary">⬇ Exportar PDF</button>
     </div>
     ${preview}
   `;
+}
+
+function dataNoPeriodo(dateStr) {
+  if (!dateStr) return false;
+  const { periodoInicio, periodoFim } = state.report;
+  if (periodoInicio && dateStr < periodoInicio) return false;
+  if (periodoFim && dateStr > periodoFim) return false;
+  return true;
 }
 
 function getReportRows() {
@@ -663,6 +753,8 @@ function getReportRows() {
       obras = obras.filter((o) => obraEditorasList(o).includes(filterValue));
     } else if (filterType === "editadas") {
       obras = obras.filter((o) => o.editado);
+    } else if (filterType === "nao-editadas") {
+      obras = obras.filter((o) => !o.editado);
     }
     return {
       headers: ["Título", "Autores (% — Editora)", "Editoras", "Editado"],
@@ -682,6 +774,9 @@ function getReportRows() {
   if (filterType === "artista" && filterValue) tasks = tasks.filter((t) => t.artista === filterValue);
   if (filterType === "produtor" && filterValue) tasks = tasks.filter((t) => t.produtor === filterValue);
   if (filterType === "cliente" && filterValue) tasks = tasks.filter((t) => t.cliente === filterValue);
+  if (state.report.periodoInicio || state.report.periodoFim) {
+    tasks = tasks.filter((t) => dataNoPeriodo(t.mixagem.data) || dataNoPeriodo(t.master.data));
+  }
 
   return {
     headers: ["Título", "Tipo", "Artista", "Produtor", "Cliente", "Status", "Entrega Mix", "Entrega Master", "Concluída"],
@@ -828,6 +923,34 @@ function attachDynamicListeners() {
     });
   });
 
+  const newProjetoBtn = document.getElementById("new-projeto-btn");
+  if (newProjetoBtn) {
+    newProjetoBtn.addEventListener("click", () => {
+      const input = document.getElementById("new-projeto-input");
+      const nome = input.value.trim();
+      if (!nome) return;
+      db.collection("projetos").add({ nome });
+      input.value = "";
+    });
+  }
+  document.querySelectorAll("[data-projeto-link-btn]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const projetoId = btn.dataset.projetoLinkBtn;
+      const select = document.querySelector(`[data-projeto-link-select="${projetoId}"]`);
+      const taskId = select.value;
+      if (!taskId) { alert("Selecione uma tarefa para vincular."); return; }
+      db.collection("tasks").doc(taskId).update({ projetoId });
+    });
+  });
+  document.querySelectorAll("[data-unlink-task]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      db.collection("tasks").doc(btn.dataset.unlinkTask).update({ projetoId: null });
+    });
+  });
+  document.querySelectorAll("[data-projeto-nova-tarefa]").forEach((btn) => {
+    btn.addEventListener("click", () => openTaskModal(null, btn.dataset.projetoNovaTarefa));
+  });
+
   document.querySelectorAll("[data-report-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.report.type = btn.dataset.reportType;
@@ -848,6 +971,28 @@ function attachDynamicListeners() {
   if (reportFilterValueEl) {
     reportFilterValueEl.addEventListener("change", (e) => {
       state.report.filterValue = e.target.value;
+      render();
+    });
+  }
+  const reportPeriodoInicioEl = document.getElementById("report-periodo-inicio");
+  if (reportPeriodoInicioEl) {
+    reportPeriodoInicioEl.addEventListener("change", (e) => {
+      state.report.periodoInicio = e.target.value;
+      render();
+    });
+  }
+  const reportPeriodoFimEl = document.getElementById("report-periodo-fim");
+  if (reportPeriodoFimEl) {
+    reportPeriodoFimEl.addEventListener("change", (e) => {
+      state.report.periodoFim = e.target.value;
+      render();
+    });
+  }
+  const reportPeriodoLimparBtn = document.getElementById("report-periodo-limpar");
+  if (reportPeriodoLimparBtn) {
+    reportPeriodoLimparBtn.addEventListener("click", () => {
+      state.report.periodoInicio = "";
+      state.report.periodoFim = "";
       render();
     });
   }
@@ -940,9 +1085,12 @@ function deletePerson(id, collection) {
   if (collection === "produtores") emUso = state.tasks.some((t) => t.produtor === person.nome);
   if (collection === "autores") emUso = state.obras.some((o) => (o.autores || []).some((a) => a.nome === person.nome));
   if (collection === "editoras") emUso = state.obras.some((o) => obraEditorasList(o).includes(person.nome));
+  if (collection === "projetos") emUso = state.tasks.some((t) => t.projetoId === person.id);
 
   const aviso = emUso
-    ? " Ele(a) está vinculado(a) a tarefas ou obras existentes, que manterão o nome mesmo após a exclusão."
+    ? (collection === "projetos"
+        ? " Existem tarefas vinculadas a esse projeto, que ficarão sem projeto após a exclusão."
+        : " Ele(a) está vinculado(a) a tarefas ou obras existentes, que manterão o nome mesmo após a exclusão.")
     : "";
   if (confirm(`Excluir "${person.nome}"?${aviso}`)) {
     db.collection(collection).doc(id).delete();
@@ -953,7 +1101,7 @@ function deletePerson(id, collection) {
 
 const taskModal = document.getElementById("task-modal");
 
-function openTaskModal(taskId) {
+function openTaskModal(taskId, presetProjetoId) {
   state.editingTaskId = taskId || null;
   const task = taskId ? state.tasks.find((t) => t.id === taskId) : null;
 
@@ -967,6 +1115,7 @@ function openTaskModal(taskId) {
   fillSelect("f-artista", state.artistas.map((a) => a.nome));
   fillSelect("f-produtor", state.produtores.map((p) => p.nome));
   fillObraSelect();
+  fillProjetoSelect();
 
   document.getElementById("f-titulo").value = task ? task.titulo : "";
   document.getElementById("f-tipo").value = task ? task.tipo : "Single";
@@ -974,6 +1123,7 @@ function openTaskModal(taskId) {
   if (task && task.artista) document.getElementById("f-artista").value = task.artista;
   if (task && task.produtor) document.getElementById("f-produtor").value = task.produtor;
   document.getElementById("f-cliente").value = task ? task.cliente || "" : "";
+  document.getElementById("f-projeto").value = task ? (task.projetoId || "") : (presetProjetoId || "");
   document.getElementById("f-status").value = task ? task.status : "Composição";
 
   document.getElementById("f-obra").value = task && task.obraId ? task.obraId : "";
@@ -1025,7 +1175,7 @@ document.getElementById("f-tipo").addEventListener("change", (e) => {
 document.querySelectorAll('[data-add]').forEach((btn) => {
   btn.addEventListener("click", () => {
     const collection = btn.dataset.add;
-    const labelMap = { artistas: "artista", produtores: "produtor", editoras: "editora" };
+    const labelMap = { artistas: "artista", produtores: "produtor", editoras: "editora", projetos: "projeto" };
     const name = prompt(`Nome do novo ${labelMap[collection] || "item"}:`);
     if (name && name.trim()) {
       db.collection(collection).add({ nome: name.trim() });
@@ -1159,6 +1309,7 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
   const artista = tipo === "Composição" ? null : document.getElementById("f-artista").value;
   const produtor = document.getElementById("f-produtor").value;
   const cliente = document.getElementById("f-cliente").value.trim();
+  const projetoId = document.getElementById("f-projeto").value || null;
   const status = document.getElementById("f-status").value;
   const obraId = document.getElementById("f-obra").value || null;
   const obraTemp = document.getElementById("f-obra-temp").value.trim();
@@ -1177,7 +1328,7 @@ document.getElementById("save-task-btn").addEventListener("click", () => {
     : obraTemp;
 
   const payload = {
-    titulo, tipo, artista, produtor, cliente, status,
+    titulo, tipo, artista, produtor, cliente, projetoId, status,
     obraId, obraNome, concluida, observacoes,
     mixagem: { data: mixData, confirmada: state.taskMixDraft.confirmada, linkBackup: state.taskMixDraft.link },
     master: { data: masterData, confirmada: state.taskMasterDraft.confirmada, link: state.taskMasterDraft.link },
@@ -1242,6 +1393,7 @@ function openObraViewModal(obraId) {
       `).join("");
 
   document.getElementById("ov-letra").textContent = obra.letra || "Sem letra cadastrada.";
+  document.getElementById("ov-letra").style.color = obra.letra && obra.letra.trim() ? "" : "#E5544C";
 
   document.getElementById("obra-view-edit-btn").classList.toggle("hidden", state.role !== "editor");
   obraViewModal.classList.remove("hidden");

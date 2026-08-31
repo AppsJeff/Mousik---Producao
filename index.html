@@ -29,10 +29,11 @@
         <div class="logo">M<span class="logo-o"></span>usik</div>
         <p class="sidebar-subtitle">Central de Produção</p>
         <nav id="nav" class="nav">
-          <button class="nav-item active" data-tab="tarefas">Tarefas</button>
+          <button class="nav-item active" data-tab="tarefas">Produção</button>
           <button class="nav-item" data-tab="cronograma">Cronograma</button>
           <button class="nav-item" data-tab="calendario">Calendário</button>
           <button class="nav-item" data-tab="lancamentos">Lançamentos</button>
+          <button class="nav-item" data-tab="projetos">Projetos</button>
           <button class="nav-item" data-tab="artistas">Artistas</button>
           <button class="nav-item" data-tab="produtores">Produtores</button>
           <button class="nav-item" data-tab="autores">Autores</button>
@@ -108,6 +109,14 @@
 
         <label class="field-label">Cliente</label>
         <input id="f-cliente" type="text" placeholder="Opcional — pra quem é a tarefa" />
+
+        <label class="field-label">Projeto</label>
+        <div class="select-row">
+          <select id="f-projeto">
+            <option value="">— Nenhum —</option>
+          </select>
+          <button type="button" class="btn-small" data-add="projetos">+ Novo</button>
+        </div>
 
         <label class="field-label">Status</label>
         <select id="f-status">
