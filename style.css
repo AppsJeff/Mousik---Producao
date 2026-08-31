@@ -217,6 +217,11 @@ body {
   display: inline-block;
   white-space: nowrap;
 }
+.pill-btn {
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
 .date-badge-label {
   font-size: 9px;
   text-transform: uppercase;

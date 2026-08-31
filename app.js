@@ -520,7 +520,7 @@ function renderPessoas(taskField, people, collection) {
       ${taskField && related.length === 0 ? `<p style="font-size:11px;color:#8C8C88">Nenhuma tarefa no momento</p>` : ""}
       ${related.map((t) => `<div class="people-task-row">
         <span>${t.titulo}</span>
-        <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
+        <button type="button" class="pill pill-btn" data-goto-task="${t.id}" title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
       </div>`).join("")}
       ${collection === "autores" ? (
         obrasDoAutor.length === 0
@@ -564,7 +564,7 @@ function renderObras() {
       ${!o.letra || !o.letra.trim() ? `<span class="pill" style="color:#E5544C;border:1px solid #E5544C55;background:#E5544C14;margin-top:4px;display:inline-block">Falta Letra</span>` : ""}
       ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
         <span>${t.titulo}</span>
-        <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
+        <button type="button" class="pill pill-btn" data-goto-task="${t.id}" data-stop-card-click title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
       </div>`).join("") : `<p style="font-size:11px;color:#8C8C88;margin-top:6px">Nenhuma tarefa vinculada</p>`}
     </div>`;
   }).join("")}</div>`;
@@ -630,7 +630,7 @@ function renderProjetos() {
         : tarefas.map((t) => `<div class="people-task-row">
             <span>${t.titulo}</span>
             <span style="display:flex;align-items:center;gap:6px">
-              <span class="pill" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</span>
+              <button type="button" class="pill pill-btn" data-goto-task="${t.id}" title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
               ${state.role === "editor" ? `<button class="task-edit-btn danger" data-unlink-task="${t.id}" title="Remover do projeto">✕</button>` : ""}
             </span>
           </div>`).join("")
