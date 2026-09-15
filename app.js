@@ -33,7 +33,7 @@ let state = {
   mixOkContext: { mode: "draft", taskId: null },
   taskMasterDraft: { link: "", confirmada: false },
   masterOkContext: { mode: "draft", taskId: null },
-  report: { type: "obras", filterType: "todas", filterValue: "", periodoInicio: "", periodoFim: "" },
+  report: { type: "obras", filterType: "todas", filterValue: "", periodoInicio: "", periodoFim: "", obrasStatus: "todas" },
 };
 
 function filteredTasks() {
@@ -543,31 +543,49 @@ function renderPessoas(taskField, people, collection) {
 
 /* ---------------------- OBRAS ---------------------- */
 
+function renderObraCard(o) {
+  const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—";
+  const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
+  return `<div class="people-card clickable ${o.editado ? "editado" : ""}" id="obra-card-${o.id}" data-view-obra="${o.id}">
+    <div class="people-card-header">
+      <p style="margin:0;font-size:14px">${o.titulo}${o.editado ? " ✅" : ""}</p>
+      ${state.role === "editor" ? `
+        <div class="row-actions">
+          <button class="task-edit-btn" data-toggle-editado="${o.id}">${o.editado ? "Desfazer Editado" : "Editado"}</button>
+          <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
+        </div>` : ""}
+    </div>
+    <p class="obra-meta">Autores: ${autoresTxt}</p>
+    ${!o.letra || !o.letra.trim() ? `<span class="pill" style="color:#E5544C;border:1px solid #E5544C55;background:#E5544C14;margin-top:4px;display:inline-block">Falta Letra</span>` : ""}
+    ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
+      <span>${t.titulo}</span>
+      <button type="button" class="pill pill-btn" data-goto-task="${t.id}" data-stop-card-click title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
+    </div>`).join("") : `<p style="font-size:11px;color:#8C8C88;margin-top:6px">Nenhuma tarefa vinculada</p>`}
+  </div>`;
+}
+
 function renderObras() {
   if (state.obras.length === 0) {
     return `<div class="empty-state"><p>Nenhuma obra cadastrada ainda</p>
       <p style="font-size:11px">${state.role === "editor" ? 'Use o botão "Nova Obra" para começar.' : "Volte em breve."}</p></div>`;
   }
-  return `<div class="people-grid">${state.obras.map((o) => {
-    const autoresTxt = (o.autores || []).map((a) => `${a.nome} (${a.percentual}%${a.editora ? ` — ${a.editora}` : ""})`).join(", ") || "—";
-    const tarefasVinculadas = state.tasks.filter((t) => t.obraId === o.id);
-    return `<div class="people-card clickable ${o.editado ? "editado" : ""}" id="obra-card-${o.id}" data-view-obra="${o.id}">
-      <div class="people-card-header">
-        <p style="margin:0;font-size:14px">${o.titulo}${o.editado ? " ✅" : ""}</p>
-        ${state.role === "editor" ? `
-          <div class="row-actions">
-            <button class="task-edit-btn" data-toggle-editado="${o.id}">${o.editado ? "Desfazer Editado" : "Editado"}</button>
-            <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
-          </div>` : ""}
-      </div>
-      <p class="obra-meta">Autores: ${autoresTxt}</p>
-      ${!o.letra || !o.letra.trim() ? `<span class="pill" style="color:#E5544C;border:1px solid #E5544C55;background:#E5544C14;margin-top:4px;display:inline-block">Falta Letra</span>` : ""}
-      ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
-        <span>${t.titulo}</span>
-        <button type="button" class="pill pill-btn" data-goto-task="${t.id}" data-stop-card-click title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
-      </div>`).join("") : `<p style="font-size:11px;color:#8C8C88;margin-top:6px">Nenhuma tarefa vinculada</p>`}
-    </div>`;
-  }).join("")}</div>`;
+
+  const editadas = state.obras.filter((o) => o.editado);
+  const naoEditadas = state.obras.filter((o) => !o.editado);
+
+  return `
+    <div class="obras-section">
+      <p class="obras-section-title">Não editadas (${naoEditadas.length})</p>
+      ${naoEditadas.length === 0
+        ? `<p style="font-size:11px;color:#8C8C88;margin-bottom:20px">Nenhuma obra pendente de edição</p>`
+        : `<div class="people-grid" style="margin-bottom:28px">${naoEditadas.map(renderObraCard).join("")}</div>`}
+
+      <p class="obras-section-title">Editadas (${editadas.length})</p>
+      ${editadas.length === 0
+        ? `<p style="font-size:11px;color:#8C8C88">Nenhuma obra editada ainda</p>`
+        : `<div class="people-grid">${editadas.map(renderObraCard).join("")}</div>`}
+    </div>
+  `;
 }
 
 /* ---------------------- LANÇAMENTOS ---------------------- */
@@ -669,13 +687,22 @@ function renderRelatorio() {
 
   let filterOptions = "";
   let valueOptions = "";
+  let statusBar = "";
   if (type === "obras") {
+    const statusFiltro = state.report.obrasStatus || "todas";
+    statusBar = `
+      <div class="filter-bar">
+        <select id="report-obras-status">
+          <option value="todas" ${statusFiltro === "todas" ? "selected" : ""}>Todas (editadas + não editadas)</option>
+          <option value="editadas" ${statusFiltro === "editadas" ? "selected" : ""}>Somente editadas</option>
+          <option value="nao-editadas" ${statusFiltro === "nao-editadas" ? "selected" : ""}>Somente não editadas</option>
+        </select>
+      </div>
+    `;
     filterOptions = `
-      <option value="todas" ${filterType === "todas" ? "selected" : ""}>Todas</option>
+      <option value="todas" ${filterType === "todas" ? "selected" : ""}>Todos os autores/editoras</option>
       <option value="autor" ${filterType === "autor" ? "selected" : ""}>Por autor</option>
       <option value="editora" ${filterType === "editora" ? "selected" : ""}>Por editora</option>
-      <option value="editadas" ${filterType === "editadas" ? "selected" : ""}>Editadas</option>
-      <option value="nao-editadas" ${filterType === "nao-editadas" ? "selected" : ""}>Não editadas</option>
     `;
     if (filterType === "autor") {
       valueOptions = state.autores.map((a) => `<option value="${a.nome}" ${a.nome === filterValue ? "selected" : ""}>${a.nome}</option>`).join("");
@@ -702,7 +729,7 @@ function renderRelatorio() {
   const filterBar = `
     <div class="filter-bar">
       <select id="report-filter-type">${filterOptions}</select>
-      ${filterType !== "todas" && filterType !== "editadas" && filterType !== "nao-editadas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
+      ${filterType !== "todas" ? `<select id="report-filter-value"><option value="">Selecione...</option>${valueOptions}</select>` : ""}
     </div>
   `;
 
@@ -722,6 +749,7 @@ function renderRelatorio() {
 
   return `
     ${typeTabs}
+    ${statusBar}
     ${filterBar}
     ${periodoBar}
     <div class="report-actions">
@@ -747,14 +775,15 @@ function getReportRows() {
 
   if (type === "obras") {
     let obras = state.obras;
+    if (state.report.obrasStatus === "editadas") {
+      obras = obras.filter((o) => o.editado);
+    } else if (state.report.obrasStatus === "nao-editadas") {
+      obras = obras.filter((o) => !o.editado);
+    }
     if (filterType === "autor" && filterValue) {
       obras = obras.filter((o) => (o.autores || []).some((a) => a.nome === filterValue));
     } else if (filterType === "editora" && filterValue) {
       obras = obras.filter((o) => obraEditorasList(o).includes(filterValue));
-    } else if (filterType === "editadas") {
-      obras = obras.filter((o) => o.editado);
-    } else if (filterType === "nao-editadas") {
-      obras = obras.filter((o) => !o.editado);
     }
     return {
       headers: ["Título", "Autores (% — Editora)", "Editoras", "Editado"],
@@ -956,9 +985,17 @@ function attachDynamicListeners() {
       state.report.type = btn.dataset.reportType;
       state.report.filterType = "todas";
       state.report.filterValue = "";
+      state.report.obrasStatus = "todas";
       render();
     });
   });
+  const reportObrasStatusEl = document.getElementById("report-obras-status");
+  if (reportObrasStatusEl) {
+    reportObrasStatusEl.addEventListener("change", (e) => {
+      state.report.obrasStatus = e.target.value;
+      render();
+    });
+  }
   const reportFilterTypeEl = document.getElementById("report-filter-type");
   if (reportFilterTypeEl) {
     reportFilterTypeEl.addEventListener("change", (e) => {
