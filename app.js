@@ -23,11 +23,12 @@ let state = {
   autores: [],    // [{id, nome}]
   editoras: [],   // [{id, nome}]
   projetos: [],   // [{id, nome}]
-  obras: [],      // [{id, titulo, editoras:[nome], letra, autores:[{nome,percentual}]}]
+  obras: [],      // [{id, titulo, artistas:[nome], letra, autores:[{nome,percentual,editora}]}]
   editingTaskId: null,
   editingObraId: null,
   viewingObraId: null,
   obraAutoresDraft: [],
+  obraArtistasDraft: [],
   filter: { type: "todos", value: "" },
   taskMixDraft: { link: "", confirmada: false },
   mixOkContext: { mode: "draft", taskId: null },
@@ -128,6 +129,7 @@ function listenToData() {
   db.collection("artistas").orderBy("nome").onSnapshot((snap) => {
     state.artistas = snap.docs.map((d) => ({ id: d.id, nome: d.data().nome }));
     fillSelect("f-artista", state.artistas.map((a) => a.nome));
+    fillObraArtistaSelect();
     render();
   });
   db.collection("produtores").orderBy("nome").onSnapshot((snap) => {
@@ -191,6 +193,12 @@ function fillObraAutorSelect() {
   const el = document.getElementById("o-add-autor-select");
   if (!el) return;
   el.innerHTML = state.autores.map((a) => `<option value="${a.nome}">${a.nome}</option>`).join("");
+}
+
+function fillObraArtistaSelect() {
+  const el = document.getElementById("o-add-artista-select");
+  if (!el) return;
+  el.innerHTML = state.artistas.map((a) => `<option value="${a.nome}">${a.nome}</option>`).join("");
 }
 
 function obraEditorasList(o) {
@@ -508,6 +516,9 @@ function renderPessoas(taskField, people, collection) {
     const obrasDaEditora = collection === "editoras"
       ? state.obras.filter((o) => obraEditorasList(o).includes(name))
       : [];
+    const obrasDoArtista = collection === "artistas"
+      ? state.obras.filter((o) => (o.artistas || []).includes(name))
+      : [];
     return `<div class="people-card">
       <div class="people-card-header">
         <p style="margin:0;font-size:14px">${name}</p>
@@ -522,6 +533,15 @@ function renderPessoas(taskField, people, collection) {
         <span>${t.titulo}</span>
         <button type="button" class="pill pill-btn" data-goto-task="${t.id}" title="Ver produção" style="color:${STATUS_COLOR[t.status]};border:1px solid ${STATUS_COLOR[t.status]}55;background:${STATUS_COLOR[t.status]}14">${t.status}</button>
       </div>`).join("")}
+      ${collection === "artistas" ? `
+        <p class="obra-meta" style="margin-top:8px">Obras gravadas:</p>
+        ${obrasDoArtista.length === 0
+          ? `<p style="font-size:11px;color:#8C8C88">Nenhuma obra vinculada</p>`
+          : obrasDoArtista.map((o) => `<div class="people-task-row">
+              <button type="button" class="obra-link" data-goto-obra="${o.id}">${o.titulo}</button>
+            </div>`).join("")
+        }
+      ` : ""}
       ${collection === "autores" ? (
         obrasDoAutor.length === 0
           ? `<p style="font-size:11px;color:#8C8C88">Nenhuma obra vinculada</p>`
@@ -555,6 +575,7 @@ function renderObraCard(o) {
           <button class="task-edit-btn danger" data-del-obra="${o.id}">Excluir</button>
         </div>` : ""}
     </div>
+    <p class="obra-meta">Artistas: ${(o.artistas || []).join(", ") || "—"}</p>
     <p class="obra-meta">Autores: ${autoresTxt}</p>
     ${!o.letra || !o.letra.trim() ? `<span class="pill" style="color:#E5544C;border:1px solid #E5544C55;background:#E5544C14;margin-top:4px;display:inline-block">Falta Letra</span>` : ""}
     ${tarefasVinculadas.length > 0 ? tarefasVinculadas.map((t) => `<div class="people-task-row">
@@ -1095,6 +1116,13 @@ function editPerson(id, collection) {
     });
   }
 
+  if (collection === "artistas") {
+    state.obras.filter((o) => (o.artistas || []).includes(nomeAntigo)).forEach((o) => {
+      const novosArtistas = o.artistas.map((a) => a === nomeAntigo ? nomeNovo : a);
+      batch.update(db.collection("obras").doc(o.id), { artistas: novosArtistas });
+    });
+  }
+
   if (collection === "autores") {
     state.obras.filter((o) => (o.autores || []).some((a) => a.nome === nomeAntigo)).forEach((o) => {
       const novosAutores = o.autores.map((a) => a.nome === nomeAntigo ? { ...a, nome: nomeNovo } : a);
@@ -1118,7 +1146,7 @@ function deletePerson(id, collection) {
   if (!person) return;
 
   let emUso = false;
-  if (collection === "artistas") emUso = state.tasks.some((t) => t.artista === person.nome);
+  if (collection === "artistas") emUso = state.tasks.some((t) => t.artista === person.nome) || state.obras.some((o) => (o.artistas || []).includes(person.nome));
   if (collection === "produtores") emUso = state.tasks.some((t) => t.produtor === person.nome);
   if (collection === "autores") emUso = state.obras.some((o) => (o.autores || []).some((a) => a.nome === person.nome));
   if (collection === "editoras") emUso = state.obras.some((o) => obraEditorasList(o).includes(person.nome));
@@ -1402,6 +1430,10 @@ function openObraModal(obraId) {
   fillObraAutorSelect();
   renderObraAutoresDraft();
 
+  state.obraArtistasDraft = obra ? [...(obra.artistas || [])] : [];
+  fillObraArtistaSelect();
+  renderObraArtistasDraft();
+
   obraModal.classList.remove("hidden");
 }
 
@@ -1418,6 +1450,7 @@ function openObraViewModal(obraId) {
   state.viewingObraId = obraId;
 
   document.getElementById("ov-titulo").textContent = obra.titulo + (obra.editado ? " ✅" : "");
+  document.getElementById("ov-artistas").textContent = (obra.artistas || []).join(", ") || "—";
 
   const autores = obra.autores || [];
   document.getElementById("ov-autores-list").innerHTML = autores.length === 0
@@ -1498,6 +1531,37 @@ document.getElementById("o-add-autor-btn").addEventListener("click", () => {
   renderObraAutoresDraft();
 });
 
+function renderObraArtistasDraft() {
+  const list = document.getElementById("o-artistas-list");
+  if (state.obraArtistasDraft.length === 0) {
+    list.innerHTML = `<p class="field-hint">Nenhum artista vinculado</p>`;
+    return;
+  }
+  list.innerHTML = state.obraArtistasDraft.map((nome, i) => `
+    <div class="autor-row">
+      <span>${nome}</span>
+      <button type="button" data-remove-artista="${i}">✕</button>
+    </div>
+  `).join("");
+
+  list.querySelectorAll("[data-remove-artista]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.removeArtista);
+      state.obraArtistasDraft.splice(idx, 1);
+      renderObraArtistasDraft();
+    });
+  });
+}
+
+document.getElementById("o-add-artista-btn").addEventListener("click", () => {
+  const select = document.getElementById("o-add-artista-select");
+  const nome = select.value;
+  if (!nome) { alert("Cadastre um artista na aba Artistas primeiro."); return; }
+  if (state.obraArtistasDraft.includes(nome)) { alert("Esse artista já foi adicionado."); return; }
+  state.obraArtistasDraft.push(nome);
+  renderObraArtistasDraft();
+});
+
 document.getElementById("save-obra-btn").addEventListener("click", () => {
   const titulo = document.getElementById("o-titulo").value.trim();
   const letra = document.getElementById("o-letra").value.trim();
@@ -1508,7 +1572,7 @@ document.getElementById("save-obra-btn").addEventListener("click", () => {
   const total = autores.reduce((s, a) => s + (a.percentual || 0), 0);
   if (total !== 100) { alert(`Os percentuais precisam somar 100%. Atualmente somam ${total}%.`); return; }
 
-  const payload = { titulo, letra, autores };
+  const payload = { titulo, letra, autores, artistas: state.obraArtistasDraft };
 
   if (state.editingObraId) {
     payload.editora = firebase.firestore.FieldValue.delete();

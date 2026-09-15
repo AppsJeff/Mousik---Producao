@@ -200,7 +200,15 @@
         <label class="field-label">Título da obra</label>
         <input id="o-titulo" type="text" placeholder="Ex: Bang" />
 
-        <label class="field-label">Letra</label>
+        <label class="field-label">Artistas (quem gravou)</label>
+        <p class="field-hint">Opcional — não precisa de uma tarefa/produção pra vincular</p>
+        <div id="o-artistas-list"></div>
+        <div class="select-row" style="margin-top:6px">
+          <select id="o-add-artista-select"></select>
+          <button type="button" id="o-add-artista-btn" class="btn-small">+ Adicionar artista</button>
+        </div>
+
+        <label class="field-label" style="margin-top:14px">Letra</label>
         <textarea id="o-letra" rows="4" placeholder="Letra da música"></textarea>
 
         <label class="field-label">Autores, percentuais e editoras</label>
@@ -225,7 +233,10 @@
         <button id="close-obra-view-modal-btn" class="btn-icon">✕</button>
       </div>
       <div class="modal-body">
-        <p class="field-label">Autores, percentuais e editoras</p>
+        <p class="field-label">Artistas</p>
+        <p id="ov-artistas" class="obra-meta"></p>
+
+        <p class="field-label" style="margin-top:14px">Autores, percentuais e editoras</p>
         <div id="ov-autores-list"></div>
 
         <p class="field-label" style="margin-top:14px">Letra</p>
